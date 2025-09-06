@@ -1,0 +1,440 @@
+/* Print Styles */
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100% !important;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0.5in;
+  }
+  
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    color: black !important;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+  }
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  body {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: black !important;
+    background: white !important;
+    width: 100%;
+    height: auto !important;
+    margin: 0;
+    padding: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    page-break-inside: avoid;
+  }
+  
+  .receipt {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    font-family: 'Times New Roman', Times, serif !important;
+    font-size: 12pt !important;
+    line-height: 1.4;
+    color: black !important;
+    background: white !important;
+    position: static !important;
+    box-sizing: border-box;
+    overflow: visible !important;
+    display: block !important;
+    height: auto !important;
+    page-break-inside: avoid;
+  }
+  .receipt h1 {
+    font-size: 18pt !important;
+    font-weight: bold;
+    margin-bottom: 15px !important;
+    text-align: center !important;
+  }
+  
+  .receipt h2 {
+    color: #333 !important;
+    margin-bottom: 12px !important;
+    font-size: 14pt !important;
+    font-weight: bold !important;
+  }
+  
+  .receipt h3 {
+    color: #333 !important;
+    margin-bottom: 10px !important;
+    font-size: 12pt !important;
+    font-weight: bold !important;
+  }
+  .receipt .dashed-line {
+    border-bottom: 1px dashed #000;
+    margin: 5px 0;
+  }
+  .receipt .total-line {
+    font-weight: bold;
+    font-size: 16px;
+  }
+  .receipt table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+    margin: 8px 0 !important;
+    background: white !important;
+    color: black !important;
+    page-break-inside: auto;
+  }
+  
+  .receipt th, .receipt td {
+    font-size: 11px !important;
+    padding: 3px 2px !important;
+    vertical-align: top !important;
+    border: none !important;
+    word-wrap: break-word !important;
+    background: white !important;
+    color: black !important;
+    overflow: visible !important;
+  }
+  .receipt th:nth-child(1), .receipt td:nth-child(1) {
+    width: 40% !important;
+    text-align: left !important;
+    word-wrap: break-word !important;
+    overflow: visible !important;
+  }
+  .receipt th:nth-child(2), .receipt td:nth-child(2) {
+    width: 15% !important;
+    text-align: center !important;
+    overflow: visible !important;
+  }
+  .receipt th:nth-child(3), .receipt td:nth-child(3) {
+    width: 22.5% !important;
+    text-align: right !important;
+    overflow: visible !important;
+    padding-right: 4px !important;
+  }
+  .receipt th:nth-child(4), .receipt td:nth-child(4) {
+    width: 22.5% !important;
+    text-align: right !important;
+    overflow: visible !important;
+    padding-right: 4px !important;
+  }
+  .receipt img {
+    max-height: 50px;
+    max-width: 100px;
+    object-fit: contain;
+    margin: 0 auto 8px auto;
+    display: block;
+  }
+  .receipt .watermark {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) rotate(45deg) !important;
+    font-size: 120px !important;
+    color: rgba(0, 0, 0, 0.05) !important;
+    font-weight: bold !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+    white-space: nowrap !important;
+    background: transparent !important;
+  }
+  
+  .receipt .text-watermark {
+    font-size: 36px !important;
+    color: rgba(0, 0, 0, 0.02) !important;
+  }
+  
+  .receipt .content {
+    position: relative !important;
+    z-index: 10 !important;
+    background: transparent !important;
+  }
+  .receipt .flex {
+    display: block !important;
+    width: 100% !important;
+    margin: 2px 0 !important;
+    overflow: visible !important;
+    clear: both !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  .receipt .flex span:first-child {
+    display: inline-block !important;
+    float: left !important;
+    text-align: left !important;
+    overflow: visible !important;
+    width: auto !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  .receipt .flex span:last-child {
+    display: inline-block !important;
+    float: right !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+    width: auto !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  .receipt .justify-between {
+    display: block !important;
+    width: 100% !important;
+    margin: 2px 0 !important;
+    overflow: visible !important;
+    clear: both !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  .receipt .justify-between span:first-child {
+    display: inline-block !important;
+    float: left !important;
+    text-align: left !important;
+    overflow: visible !important;
+    width: auto !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  .receipt .justify-between span:last-child {
+    display: inline-block !important;
+    float: right !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+    width: auto !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  .receipt .justify-between:after {
+    content: "" !important;
+    display: table !important;
+    clear: both !important;
+  }
+   .receipt .space-y-1 > * + * {
+     margin-top: 0.25rem !important;
+   }
+   .receipt .font-bold {
+     font-weight: bold !important;
+   }
+   .receipt .text-base {
+     font-size: 1rem !important;
+   }
+   .receipt .text-lg {
+     font-size: 14pt !important;
+     font-weight: bold !important;
+   }
+   .receipt .text-sm {
+     font-size: 11pt !important;
+   }
+   .receipt .text-xs {
+     font-size: 10pt !important;
+   }
+   .receipt .mb-4 {
+     margin-bottom: 1rem !important;
+   }
+   .receipt .mb-2 {
+     margin-bottom: 0.5rem !important;
+   }
+   .receipt .my-2 {
+     margin-top: 0.5rem !important;
+     margin-bottom: 0.5rem !important;
+   }
+   .receipt .my-1 {
+     margin-top: 0.25rem !important;
+     margin-bottom: 0.25rem !important;
+   }
+   .receipt .mt-1 {
+     margin-top: 0.25rem !important;
+   }
+   .receipt .mt-2 {
+     margin-top: 0.5rem !important;
+   }
+   .receipt table {
+     width: 100% !important;
+     border-collapse: collapse !important;
+     table-layout: fixed !important;
+     margin: 16px 0 !important;
+     overflow: visible !important;
+     position: static !important;
+     float: none !important;
+     display: table !important;
+     page-break-inside: auto !important;
+     font-size: 11pt !important;
+   }
+   .receipt .w-full {
+     width: 100% !important;
+   }
+   .receipt .border-collapse {
+     border-collapse: collapse !important;
+   }
+   .receipt th {
+     padding: 8px !important;
+     vertical-align: top !important;
+     word-wrap: break-word !important;
+     font-size: 11pt !important;
+     overflow: visible !important;
+     position: static !important;
+     float: none !important;
+     display: table-cell !important;
+     page-break-inside: avoid !important;
+     font-weight: bold !important;
+     background: #f0f0f0 !important;
+     border: 1px solid #333 !important;
+     text-align: center !important;
+   }
+   
+   .receipt td {
+     padding: 8px !important;
+     vertical-align: top !important;
+     word-wrap: break-word !important;
+     font-size: 11pt !important;
+     overflow: visible !important;
+     position: static !important;
+     float: none !important;
+     display: table-cell !important;
+     page-break-inside: avoid !important;
+     border: 1px solid #333 !important;
+     background: white !important;
+     color: black !important;
+   }
+   .receipt tr {
+     page-break-inside: avoid !important;
+     page-break-after: auto !important;
+     overflow: visible !important;
+     position: static !important;
+     float: none !important;
+     display: table-row !important;
+   }
+   .receipt .text-left {
+     text-align: left !important;
+   }
+   .receipt .text-center {
+     text-align: center !important;
+   }
+   .receipt .text-right {
+     text-align: right !important;
+   }
+   .receipt .py-1 {
+     padding-top: 0.25rem !important;
+     padding-bottom: 0.25rem !important;
+   }
+   .receipt .border-b {
+     border-bottom: 1px solid #ccc !important;
+   }
+   .receipt .border-gray-300 {
+     border-color: #d1d5db !important;
+   }
+   .receipt .border-gray-100 {
+     border-color: #f3f4f6 !important;
+   }
+   .receipt th:first-child { width: 35% !important; }
+   .receipt th:nth-child(2) { width: 12% !important; }
+   .receipt th:nth-child(3) { width: 26.5% !important; }
+   .receipt th:nth-child(4) { width: 26.5% !important; }
+   .receipt th {
+     text-align: left !important;
+     padding-top: 4px !important;
+     padding-bottom: 4px !important;
+     border-bottom: 1px solid #000 !important;
+     border-color: black !important;
+   }
+   .receipt td {
+     border-bottom: 1px solid #ddd !important;
+     border-color: #666 !important;
+   }
+ }
+  
+/* Screen styles for preview */
+.receipt {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 30px !important;
+  font-family: 'Times New Roman', Times, serif !important;
+  font-size: 12pt !important;
+  line-height: 1.4;
+  color: black;
+  background: white !important;
+  position: relative;
+  box-sizing: border-box;
+  overflow-x: hidden !important;
+  overflow-y: visible;
+  word-wrap: break-word;
+  word-break: break-word;
+  border: 1px solid #ddd !important;
+}
+
+.receipt table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 8px 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden !important;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+.receipt th, .receipt td {
+  padding: 4px 2px;
+  vertical-align: top;
+  word-wrap: break-word;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.receipt th:nth-child(1), .receipt td:nth-child(1) {
+  width: 40%;
+  text-align: left;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.receipt th:nth-child(2), .receipt td:nth-child(2) {
+  width: 15%;
+  text-align: center;
+}
+
+.receipt th:nth-child(3), .receipt td:nth-child(3) {
+  width: 22.5%;
+  text-align: right;
+  padding-right: 4px;
+}
+
+.receipt th:nth-child(4), .receipt td:nth-child(4) {
+  width: 22.5%;
+  text-align: right;
+  padding-right: 4px;
+}
