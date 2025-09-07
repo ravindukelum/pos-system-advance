@@ -7,7 +7,7 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 
 // Create database instance
-const dbInstance = new Database();
+const dbInstance = Database.getInstance();
 let db;
 
 // Initialize database connection
@@ -156,7 +156,7 @@ router.post('/process', authenticateToken, async (req, res) => {
         sale_status = 'partial';
       }
       
-      const updateSaleSQL = 'UPDATE sales SET paid_amount = ?, status = ?, updated_at = NOW() WHERE id = ?';
+      const updateSaleSQL = 'UPDATE sales SET paid_amount = ?, status = ? WHERE id = ?';
       await executeQuery(updateSaleSQL, [new_paid_amount, sale_status, sale_id]);
     }
 
@@ -276,7 +276,7 @@ router.post('/refund/:paymentId', authenticateToken, async (req, res) => {
       sale_status = 'partial';
     }
     
-    const updateSaleSQL = 'UPDATE sales SET paid_amount = ?, status = ?, updated_at = NOW() WHERE id = ?';
+    const updateSaleSQL = 'UPDATE sales SET paid_amount = ?, status = ? WHERE id = ?';
     await executeQuery(updateSaleSQL, [new_paid_amount, sale_status, payment.sale_id]);
 
     res.json({

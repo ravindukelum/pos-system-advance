@@ -1,10 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const database = require('../database/db');
+const Database = require('../database/db');
 const router = express.Router();
 
 // Create database instance
-const dbInstance = new database();
+const dbInstance = Database.getInstance();
 let db;
 
 // Initialize database connection
@@ -75,7 +75,7 @@ router.get('/sku/:sku', async (req, res) => {
 // Create new inventory item
 router.post('/', async (req, res) => {
   try {
-    const { item_name, sku, category, supplier, buy_price, sell_price, quantity, min_stock, description, barcode } = req.body;
+    const { item_name, sku, category, supplier, buy_price, sell_price, quantity, min_stock, description, barcode, warranty_days } = req.body;
     
     if (!item_name || !sku || buy_price === undefined || sell_price === undefined) {
       res.status(400).json({ error: 'Item name, SKU, buy price, and sell price are required' });
@@ -99,9 +99,9 @@ router.post('/', async (req, res) => {
     
     const finalQuantity = quantity || 0;
     const finalMinStock = min_stock || 0;
-    const sql = 'INSERT INTO inventory (item_name, sku, category, supplier, buy_price, sell_price, quantity, min_stock, description, barcode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    const sql = 'INSERT INTO inventory (item_name, sku, category, supplier, buy_price, sell_price, quantity, min_stock, description, barcode, warranty_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
     
-    const [result] = await db.execute(sql, [item_name, sku, category, supplier, buy_price, sell_price, finalQuantity, finalMinStock, description, barcode]);
+    const [result] = await db.execute(sql, [item_name, sku, category, supplier, buy_price, sell_price, finalQuantity, finalMinStock, description, barcode, warranty_days || 0]);
     
     res.status(201).json({
       message: 'Item created successfully',
@@ -131,7 +131,7 @@ router.post('/', async (req, res) => {
 // Update inventory item
 router.put('/:id', async (req, res) => {
   try {
-    const { item_name, sku, category, supplier, buy_price, sell_price, quantity, min_stock, description, barcode } = req.body;
+    const { item_name, sku, category, supplier, buy_price, sell_price, quantity, min_stock, description, barcode, warranty_days } = req.body;
     
     if (!item_name || !sku || buy_price === undefined || sell_price === undefined) {
       res.status(400).json({ error: 'Item name, SKU, buy price, and sell price are required' });
@@ -155,9 +155,9 @@ router.put('/:id', async (req, res) => {
     
     const finalQuantity = quantity !== undefined ? quantity : 0;
     const finalMinStock = min_stock !== undefined ? min_stock : 0;
-    const sql = 'UPDATE inventory SET item_name = ?, sku = ?, category = ?, supplier = ?, buy_price = ?, sell_price = ?, quantity = ?, min_stock = ?, description = ?, barcode = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+    const sql = 'UPDATE inventory SET item_name = ?, sku = ?, category = ?, supplier = ?, buy_price = ?, sell_price = ?, quantity = ?, min_stock = ?, description = ?, barcode = ?, warranty_days = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
     
-    const [result] = await db.execute(sql, [item_name, sku, category, supplier, buy_price, sell_price, finalQuantity, finalMinStock, description, barcode, req.params.id]);
+    const [result] = await db.execute(sql, [item_name, sku, category, supplier, buy_price, sell_price, finalQuantity, finalMinStock, description, barcode, warranty_days || 0, req.params.id]);
     
     if (result.affectedRows === 0) {
       res.status(404).json({ error: 'Item not found' });

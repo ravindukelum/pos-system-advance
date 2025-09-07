@@ -7,7 +7,7 @@ const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const router = express.Router();
 
 // Create database instance
-const dbInstance = new Database();
+const dbInstance = Database.getInstance();
 let db;
 
 // Initialize database connection

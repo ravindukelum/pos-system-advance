@@ -271,9 +271,12 @@ const Sales = () => {
       const saleDetails = saleResponse.data.sale;
       
       if (saleDetails.items && saleDetails.items.length > 0) {
-        itemsText = saleDetails.items.map((item, index) => 
-          `${index + 1}. ${item.item_name}\n   Qty: ${item.quantity} × ${currencySymbol}${parseFloat(item.unit_price).toFixed(2)} = ${currencySymbol}${parseFloat(item.line_total).toFixed(2)}`
-        ).join('\n\n');
+        itemsText = saleDetails.items.map((item, index) => {
+          const warrantyText = item.warranty_days && item.warranty_days > 0 
+            ? `\n   🔄 Warranty: ${item.warranty_days} days` 
+            : '';
+          return `${index + 1}. ${item.item_name}\n   Qty: ${item.quantity} × ${currencySymbol}${parseFloat(item.unit_price).toFixed(2)} = ${currencySymbol}${parseFloat(item.line_total).toFixed(2)}${warrantyText}`;
+        }).join('\n\n');
       } else {
         itemsText = 'Items details not available';
       }
@@ -296,7 +299,7 @@ const Sales = () => {
       `💰 *Payment Summary:*\n` +
       `• Subtotal: ${currencySymbol}${sale.subtotal || sale.total_amount}\n` +
       `• Tax: ${currencySymbol}${sale.tax || '0.00'}\n` +
-      `• Discount: ${currencySymbol}${sale.discount || '0.00'}\n` +
+      (parseFloat(sale.discount || 0) > 0 ? `• Discount: ${currencySymbol}${sale.discount}\n` : '') +
       `• *Total Amount: ${currencySymbol}${sale.total_amount}*\n` +
       `• Paid: ${currencySymbol}${sale.paid_amount}\n` +
       `• Balance: ${currencySymbol}${(sale.total_amount - sale.paid_amount).toFixed(2)}\n\n` +
@@ -304,7 +307,6 @@ const Sales = () => {
       `🏪 *Store Information:*\n` +
       `• Location: ${sale.location || 'Main Store'}\n` +
       `• Support: ${settings?.phone || 'Contact us for support'}\n\n` +
-      `🔄 *Warranty: ${settings?.warrantyPeriod || 30} days on all items*\n\n` +
       `Thank you for choosing *${settings?.shopName || 'Your Shop'}*! 🙏\n` +
       `We appreciate your business and look forward to serving you again.\n\n` +
       `_This is an automated receipt. Please save for your records._`;
@@ -540,6 +542,19 @@ const Sales = () => {
     setShowPrintModal(true);
   };
 
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this sale? This action cannot be undone.')) {
+      try {
+        await salesAPI.delete(id);
+        fetchSales();
+        alert('Sale deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting sale:', error);
+        alert('Error deleting sale: ' + (error.response?.data?.error || error.message));
+      }
+    }
+  };
+
   const filteredSales = (sales || []).filter(sale => {
     const matchesSearch = sale.invoice.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (sale.customer_name && sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -694,7 +709,7 @@ const Sales = () => {
                          <CurrencyDollarIcon className="h-5 w-5" />
                        </button>
                        <button
-                         onClick={() => console.log('Delete sale:', sale.id)}
+                         onClick={() => handleDelete(sale.id)}
                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                          title="Delete Sale"
                        >
@@ -794,7 +809,7 @@ const Sales = () => {
                   <CurrencyDollarIcon className="h-5 w-5" />
                 </button>
                 <button
-                  onClick={() => console.log('Delete sale:', sale.id)}
+                  onClick={() => handleDelete(sale.id)}
                   className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                   title="Delete Sale"
                 >

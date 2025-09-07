@@ -287,6 +287,7 @@ const PrintInvoice = ({ sale, onClose }) => {
                   <th class="text-center">Qty</th>
                   <th class="text-right">Price</th>
                   <th class="text-right">Total</th>
+                  <th class="text-center">Warranty</th>
                 </tr>
               </thead>
               <tbody>
@@ -296,6 +297,7 @@ const PrintInvoice = ({ sale, onClose }) => {
                     <td class="text-center">${item.quantity}</td>
                     <td class="text-right">${settings?.currency || 'RS'} ${parseFloat(item.unit_price).toFixed(2)}</td>
                     <td class="text-right">${settings?.currency || 'RS'} ${parseFloat(item.line_total).toFixed(2)}</td>
+                    <td class="text-center text-xs">${item.warranty_days && item.warranty_days > 0 ? `${item.warranty_days} days` : '-'}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -489,6 +491,7 @@ const PrintInvoice = ({ sale, onClose }) => {
                           <th className="text-center py-1 text-xs">Qty</th>
                           <th className="text-right py-1 text-xs">Price</th>
                           <th className="text-right py-1 text-xs">Total</th>
+                          <th className="text-center py-1 text-xs">Warranty</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -498,6 +501,7 @@ const PrintInvoice = ({ sale, onClose }) => {
                             <td className="text-center py-1 text-xs">{item.quantity}</td>
                             <td className="text-right py-1 text-xs">{settings?.currency || 'RS'} {parseFloat(item.unit_price).toFixed(2)}</td>
                             <td className="text-right py-1 text-xs">{settings?.currency || 'RS'} {parseFloat(item.line_total).toFixed(2)}</td>
+                            <td className="text-center py-1 text-xs">{item.warranty_days && item.warranty_days > 0 ? `${item.warranty_days} days` : '-'}</td>
                           </tr>
                         ))}
                       </tbody>

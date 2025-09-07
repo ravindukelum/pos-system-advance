@@ -1,9 +1,9 @@
 const express = require('express');
-const database = require('../database/db');
+const Database = require('../database/db');
 const router = express.Router();
 
 // Create database instance
-const dbInstance = new database();
+const dbInstance = Database.getInstance();
 let db;
 
 // Initialize database connection

@@ -8,7 +8,7 @@ const path = require('path');
 const router = express.Router();
 
 // Create database instance
-const dbInstance = new Database();
+const dbInstance = Database.getInstance();
 let db;
 
 // Initialize database connection

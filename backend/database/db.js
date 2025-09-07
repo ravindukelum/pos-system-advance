@@ -1,12 +1,12 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// Determine database type and configuration
+// Determine database type
 const isPostgreSQL = process.env.DATABASE_URL ? true : false;
 let dbConfig;
 
 if (isPostgreSQL) {
-  // PostgreSQL configuration for Render
+  // PostgreSQL configuration for production
   const { Pool } = require('pg');
   dbConfig = {
     connectionString: process.env.DATABASE_URL,
@@ -17,91 +17,121 @@ if (isPostgreSQL) {
   dbConfig = {
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || 'root',
+    password: process.env.DB_PASSWORD || '',
     port: process.env.DB_PORT || 3306,
     database: process.env.DB_NAME || 'pos_system_local'
   };
 }
 
 let db;
+let isInitialized = false;
+let initializationPromise = null;
 
 // Initialize database connection
 const initializeDatabase = async () => {
-  try {
-    if (isPostgreSQL) {
-      // PostgreSQL connection
-      const { Pool } = require('pg');
-      db = new Pool(dbConfig);
-      console.log('Connected to PostgreSQL database.');
-    } else {
-      // MySQL connection
-      // First connect without database to create it if it doesn't exist
-      const connection = await mysql.createConnection({
-        host: dbConfig.host,
-        user: dbConfig.user,
-        password: dbConfig.password,
-        port: dbConfig.port
-      });
-      
-      await connection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
-      await connection.end();
-      
-      // Now connect to the database
-      db = await mysql.createConnection(dbConfig);
-      console.log('Connected to MySQL database.');
-    }
-    
+  if (isInitialized) {
     return db;
-  } catch (err) {
-    console.error('Error connecting to database:', err.message);
-    throw err;
   }
+  
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+  
+  initializationPromise = (async () => {
+    try {
+      if (isPostgreSQL) {
+        const { Pool } = require('pg');
+        db = new Pool(dbConfig);
+        
+        // Test connection
+        const client = await db.connect();
+        console.log('Connected to PostgreSQL database');
+        client.release();
+      } else {
+        // Create MySQL connection
+        db = await mysql.createConnection(dbConfig);
+        console.log('Connected to MySQL database');
+      }
+      isInitialized = true;
+      return db;
+    } catch (error) {
+      console.error('Database connection failed:', error);
+      initializationPromise = null;
+      throw error;
+    }
+  })();
+  
+  return initializationPromise;
 };
+
+let tablesInitialized = false;
+let tableInitializationPromise = null;
 
 class Database {
   constructor() {
     this.db = null;
   }
 
-  // Initialize database connection and tables
   async initialize() {
-    this.db = await initializeDatabase();
-    await this.initializeTables();
+    await initializeDatabase();
+    this.db = db;
+    
+    if (tablesInitialized) {
+      return;
+    }
+    
+    if (tableInitializationPromise) {
+      await tableInitializationPromise;
+      return;
+    }
+    
+    tableInitializationPromise = this.initializeTables();
+    await tableInitializationPromise;
+    tablesInitialized = true;
   }
 
-  // Execute query for both MySQL and PostgreSQL
   async executeQuery(sql, params = []) {
-    if (isPostgreSQL) {
-      const result = await this.db.query(sql, params);
-      return result;
-    } else {
-      const [result] = await this.db.execute(sql, params);
-      return result;
+    try {
+      if (isPostgreSQL) {
+        const result = await this.db.query(sql, params);
+        return result;
+      } else {
+        const [rows] = await this.db.execute(sql, params);
+        return rows;
+      }
+    } catch (error) {
+      console.error('Query execution error:', error);
+      throw error;
     }
   }
 
-  // Get database connection
   getDb() {
     return this.db;
   }
 
-  // Initialize database tables
   async initializeTables() {
     try {
-      // Users table for authentication
-      const usersTableSQL = isPostgreSQL ? `
+      console.log('Initializing database tables...');
+
+      // Create users table
+      const createUsersTable = isPostgreSQL ? `
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           username VARCHAR(50) UNIQUE NOT NULL,
-          email VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(100) UNIQUE NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
-          full_name VARCHAR(255) NOT NULL,
-          role VARCHAR(20) CHECK (role IN ('admin', 'manager', 'cashier', 'employee')) NOT NULL DEFAULT 'cashier',
-          status VARCHAR(20) CHECK (status IN ('active', 'inactive', 'suspended')) NOT NULL DEFAULT 'active',
-          permissions JSONB DEFAULT '{}',
+          full_name VARCHAR(100) NOT NULL,
+          role VARCHAR(20) DEFAULT 'cashier',
+          status VARCHAR(20) DEFAULT 'active',
+          phone VARCHAR(20),
+          address TEXT,
+          department VARCHAR(50),
+          position VARCHAR(50),
+          is_locked BOOLEAN DEFAULT FALSE,
+          locked_at TIMESTAMP,
+          failed_login_attempts INTEGER DEFAULT 0,
           last_login TIMESTAMP,
-          reset_token VARCHAR(255),
-          reset_token_expires TIMESTAMP,
+          permissions TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -109,162 +139,29 @@ class Database {
         CREATE TABLE IF NOT EXISTS users (
           id INT AUTO_INCREMENT PRIMARY KEY,
           username VARCHAR(50) UNIQUE NOT NULL,
-          email VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(100) UNIQUE NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
-          full_name VARCHAR(255) NOT NULL,
-          role ENUM('admin', 'manager', 'cashier', 'employee') NOT NULL DEFAULT 'cashier',
-          status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
-          permissions JSON,
+          full_name VARCHAR(100) NOT NULL,
+          role VARCHAR(20) DEFAULT 'cashier',
+          status VARCHAR(20) DEFAULT 'active',
+          phone VARCHAR(20),
+          address TEXT,
+          department VARCHAR(50),
+          position VARCHAR(50),
+          is_locked BOOLEAN DEFAULT FALSE,
+          locked_at TIMESTAMP NULL,
+          failed_login_attempts INT DEFAULT 0,
           last_login TIMESTAMP NULL,
-          reset_token VARCHAR(255),
-          reset_token_expires TIMESTAMP NULL,
+          permissions TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `;
-      
-      await this.executeQuery(usersTableSQL);
 
+      await this.executeQuery(createUsersTable);
 
-
-      // User sessions table for JWT blacklisting
-      const userCountSQL = 'SELECT COUNT(*) as count FROM users';
-      const userCountResult = await this.executeQuery(userCountSQL);
-      const userCount = isPostgreSQL ? userCountResult.rows[0].count : userCountResult[0].count;
-      
-      if (userCount === 0) {
-        try {
-          const bcrypt = require('bcryptjs');
-          const defaultPassword = await bcrypt.hash('admin123', 12);
-          const managerPassword = await bcrypt.hash('manager123', 12);
-          const cashierPassword = await bcrypt.hash('cashier123', 12);
-          
-          // Create admin user
-          const createAdminSQL = `
-            INSERT INTO users (username, email, password_hash, full_name, role, status, permissions) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `;
-          const adminPermissions = JSON.stringify({
-            'reports.view': true,
-            'payments.view': true,
-            'users.view': true,
-            'users.create': true,
-            'users.update': true,
-            'users.delete': true,
-            'users.manage_roles': true,
-            'users.lock': true,
-            'users.unlock': true
-          });
-          
-          await this.executeQuery(createAdminSQL, [
-            'admin', 'admin@pos.local', defaultPassword, 'System Administrator', 'admin', 'active', adminPermissions
-          ]);
-          
-          // Create manager user
-          const managerPermissions = JSON.stringify({
-            'reports.view': true,
-            'payments.view': true,
-            'users.view': true
-          });
-          
-          await this.executeQuery(createAdminSQL, [
-            'manager', 'manager@pos.local', managerPassword, 'Store Manager', 'manager', 'active', managerPermissions
-          ]);
-          
-          // Create cashier user
-          const cashierPermissions = JSON.stringify({
-            'payments.view': true,
-            'sales.view': true,
-            'sales.create': true,
-            'customers.view': true,
-            'customers.create': true,
-            'customers.update': true
-          });
-          
-          await this.executeQuery(createAdminSQL, [
-            'cashier', 'cashier@pos.local', cashierPassword, 'Cashier', 'cashier', 'active', cashierPermissions
-          ]);
-          
-          // Create additional cashier users
-          const cashier2Password = await bcrypt.hash('cashier2123', 12);
-          const cashier3Password = await bcrypt.hash('cashier3123', 12);
-          
-          await this.executeQuery(createAdminSQL, [
-            'cashier2', 'cashier2@pos.local', cashier2Password, 'Sarah Johnson', 'cashier', 'active', cashierPermissions
-          ]);
-          
-          await this.executeQuery(createAdminSQL, [
-            'cashier3', 'cashier3@pos.local', cashier3Password, 'Mike Davis', 'cashier', 'active', cashierPermissions
-          ]);
-          
-          console.log('Default users created:');
-          console.log('- Admin: admin/admin123');
-          console.log('- Manager: manager/manager123');
-          console.log('- Cashier: cashier/cashier123');
-          console.log('- Cashier 2: cashier2/cashier2123');
-          console.log('- Cashier 3: cashier3/cashier3123');
-        } catch (err) {
-          if (!err.message.includes('Duplicate entry')) {
-            throw err;
-          }
-          console.log('Default users already exist');
-        }
-      }
-
-      // User sessions table for JWT blacklisting
-      const sessionsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS user_sessions (
-          id SERIAL PRIMARY KEY,
-          user_id INT NOT NULL,
-          token_hash VARCHAR(255) NOT NULL,
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS user_sessions (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          user_id INT NOT NULL,
-          token_hash VARCHAR(255) NOT NULL,
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-        )
-      `;
-      
-      await this.executeQuery(sessionsTableSQL);
-
-      // Enhanced Users table for proper user management
-      // Add additional user management columns if they don't exist
-      if (!isPostgreSQL) {
-        const addUserManagementColumns = [
-          'ALTER TABLE users ADD COLUMN phone VARCHAR(50)',
-          'ALTER TABLE users ADD COLUMN address TEXT',
-          'ALTER TABLE users ADD COLUMN department VARCHAR(255)',
-          'ALTER TABLE users ADD COLUMN position VARCHAR(255)',
-          'ALTER TABLE users ADD COLUMN is_locked BOOLEAN DEFAULT FALSE',
-          'ALTER TABLE users ADD COLUMN locked_at TIMESTAMP NULL',
-          'ALTER TABLE users ADD COLUMN locked_by INT',
-          'ALTER TABLE users ADD COLUMN lock_reason TEXT',
-          'ALTER TABLE users ADD COLUMN failed_login_attempts INT DEFAULT 0',
-          'ALTER TABLE users ADD COLUMN profile_image TEXT',
-          'ALTER TABLE users ADD COLUMN notes TEXT'
-        ];
-        
-        for (const sql of addUserManagementColumns) {
-          try {
-            await this.executeQuery(sql);
-          } catch (err) {
-            // Column already exists, ignore error
-            if (!err.message.includes('Duplicate column') && !err.message.includes('already exists')) {
-              console.log('User management column addition info:', err.message);
-            }
-          }
-        }
-      }
-
-      // Customers table
-      const customersTableSQL = isPostgreSQL ? `
+      // Create customers table
+      const createCustomersTable = isPostgreSQL ? `
         CREATE TABLE IF NOT EXISTS customers (
           id SERIAL PRIMARY KEY,
           customer_code VARCHAR(50) UNIQUE NOT NULL,
@@ -301,740 +198,701 @@ class Database {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `;
-      
-      await this.executeQuery(customersTableSQL);
-      // Partners table
-      const partnersTableSQL = isPostgreSQL ? `
+
+      await this.executeQuery(createCustomersTable);
+
+      // Create partners table
+      const createPartnersTable = isPostgreSQL ? `
         CREATE TABLE IF NOT EXISTS partners (
           id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          type VARCHAR(20) CHECK (type IN ('investor', 'supplier')) NOT NULL,
+          name VARCHAR(100) NOT NULL,
+          type VARCHAR(20) NOT NULL,
           phone_no VARCHAR(50),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       ` : `
         CREATE TABLE IF NOT EXISTS partners (
           id INT AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          type ENUM('investor', 'supplier') NOT NULL,
+          name VARCHAR(100) NOT NULL,
+          type VARCHAR(20) NOT NULL,
           phone_no VARCHAR(50),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `;
-      
-      await this.executeQuery(partnersTableSQL);
 
-      // Investments table
-      const investmentsTableSQL = isPostgreSQL ? `
+      await this.executeQuery(createPartnersTable);
+
+      // Create investments table
+      const createInvestmentsTable = isPostgreSQL ? `
         CREATE TABLE IF NOT EXISTS investments (
           id SERIAL PRIMARY KEY,
-          partner_id INT NOT NULL,
-          partner_name VARCHAR(255) NOT NULL,
-          type VARCHAR(20) CHECK (type IN ('invest', 'withdraw')) NOT NULL,
+          partner_id INTEGER REFERENCES partners(id),
+          partner_name VARCHAR(255),
           amount DECIMAL(10,2) NOT NULL,
+          type VARCHAR(20) NOT NULL,
           notes TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (partner_id) REFERENCES partners (id)
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       ` : `
         CREATE TABLE IF NOT EXISTS investments (
           id INT AUTO_INCREMENT PRIMARY KEY,
-          partner_id INT NOT NULL,
-          partner_name VARCHAR(255) NOT NULL,
-          type ENUM('invest', 'withdraw') NOT NULL,
+          partner_id INT,
+          partner_name VARCHAR(255),
           amount DECIMAL(10,2) NOT NULL,
+          type VARCHAR(20) NOT NULL,
           notes TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (partner_id) REFERENCES partners (id)
+          FOREIGN KEY (partner_id) REFERENCES partners(id)
         )
       `;
-      
-      await this.executeQuery(investmentsTableSQL);
 
-      // Add notes column to existing investments table if it doesn't exist
-      if (!isPostgreSQL) {
-        try {
-          await this.executeQuery(`ALTER TABLE investments ADD COLUMN notes TEXT`);
-        } catch (err) {
-          // Column already exists, ignore error
-          if (!err.message.includes('Duplicate column name')) {
-            console.log('Note: investments table notes column may already exist');
-          }
-        }
-      }
+      await this.executeQuery(createInvestmentsTable);
 
-      // Locations table for multi-location support
-      const locationsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS locations (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          address TEXT,
-          phone VARCHAR(50),
-          manager_id INT,
-          settings JSONB DEFAULT '{}',
-          status VARCHAR(20) CHECK (status IN ('active', 'inactive')) DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (manager_id) REFERENCES users (id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS locations (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          address TEXT,
-          phone VARCHAR(50),
-          manager_id INT,
-          settings JSON,
-          status ENUM('active', 'inactive') DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          FOREIGN KEY (manager_id) REFERENCES users (id)
-        )
-      `;
-      
-      await this.executeQuery(locationsTableSQL);
-
-      // Inventory table
-      const inventoryTableSQL = isPostgreSQL ? `
+      // Create inventory table
+      const createInventoryTable = isPostgreSQL ? `
         CREATE TABLE IF NOT EXISTS inventory (
           id SERIAL PRIMARY KEY,
-          item_name VARCHAR(255) NOT NULL,
-          sku VARCHAR(100) UNIQUE NOT NULL,
-          barcode VARCHAR(255),
-          qr_code VARCHAR(255),
-          category VARCHAR(255),
-          brand VARCHAR(255),
+          item_name VARCHAR(100) NOT NULL,
+          sku VARCHAR(50) UNIQUE,
+          category VARCHAR(50),
           supplier VARCHAR(255),
-          unit VARCHAR(50) DEFAULT 'pcs',
-          buy_price DECIMAL(10,2) NOT NULL,
-          sell_price DECIMAL(10,2) NOT NULL,
-          quantity INT NOT NULL DEFAULT 0,
-          min_stock INT DEFAULT 0,
-          max_stock INT DEFAULT 1000,
-          reorder_point INT DEFAULT 5,
-          reorder_quantity INT DEFAULT 20,
-          cost_price DECIMAL(10,2),
-          wholesale_price DECIMAL(10,2),
-          tax_rate DECIMAL(5,2) DEFAULT 0.00,
-          tax_exempt BOOLEAN DEFAULT FALSE,
-          expiry_date DATE,
-          manufacture_date DATE,
-          batch_number VARCHAR(100),
-          location VARCHAR(255),
-          weight DECIMAL(8,3),
-          dimensions VARCHAR(100),
+          quantity INTEGER DEFAULT 0,
+          min_stock INTEGER DEFAULT 0,
+          unit_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+          sell_price DECIMAL(10,2),
+          buy_price DECIMAL(10,2),
           description TEXT,
-          image_url VARCHAR(500),
-          status VARCHAR(20) CHECK (status IN ('active', 'inactive', 'discontinued')) DEFAULT 'active',
-          track_serial BOOLEAN DEFAULT FALSE,
-          allow_negative_stock BOOLEAN DEFAULT FALSE,
+          barcode VARCHAR(255),
+          warranty_days INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS inventory (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          item_name VARCHAR(100) NOT NULL,
+          sku VARCHAR(50) UNIQUE,
+          category VARCHAR(50),
+          supplier VARCHAR(255),
+          quantity INT DEFAULT 0,
+          min_stock INT DEFAULT 0,
+          unit_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+          sell_price DECIMAL(10,2),
+          buy_price DECIMAL(10,2),
+          description TEXT,
+          barcode VARCHAR(255),
+          warranty_days INT DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+
+      await this.executeQuery(createInventoryTable);
+
+      // Create sales table
+      const createSalesTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS sales (
+          id SERIAL PRIMARY KEY,
+          invoice VARCHAR(100) UNIQUE,
+          date DATE NOT NULL,
+          customer_id INTEGER,
+          customer_name VARCHAR(255),
+          customer_phone VARCHAR(50),
+          total_amount DECIMAL(10,2) NOT NULL,
+          paid_amount DECIMAL(10,2) DEFAULT 0,
+          tax_amount DECIMAL(10,2) DEFAULT 0,
+          discount_amount DECIMAL(10,2) DEFAULT 0,
+          status VARCHAR(20) DEFAULT 'unpaid',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS sales (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          invoice VARCHAR(100) UNIQUE,
+          date DATE NOT NULL,
+          customer_id INT,
+          customer_name VARCHAR(255),
+          customer_phone VARCHAR(50),
+          total_amount DECIMAL(10,2) NOT NULL,
+          paid_amount DECIMAL(10,2) DEFAULT 0,
+          tax_amount DECIMAL(10,2) DEFAULT 0,
+          discount_amount DECIMAL(10,2) DEFAULT 0,
+          status VARCHAR(20) DEFAULT 'unpaid',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+
+      await this.executeQuery(createSalesTable);
+
+      // Create sales_items table
+      const createSalesItemsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS sales_items (
+          id SERIAL PRIMARY KEY,
+          sale_id INTEGER REFERENCES sales(id),
+          item_id INTEGER REFERENCES inventory(id),
+          item_name VARCHAR(100) NOT NULL,
+          quantity INTEGER NOT NULL,
+          unit_price DECIMAL(10,2) NOT NULL,
+          line_total DECIMAL(10,2) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS sales_items (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          sale_id INT,
+          item_id INT,
+          item_name VARCHAR(100) NOT NULL,
+          quantity INT NOT NULL,
+          unit_price DECIMAL(10,2) NOT NULL,
+          line_total DECIMAL(10,2) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (sale_id) REFERENCES sales(id),
+          FOREIGN KEY (item_id) REFERENCES inventory(id)
+        )
+      `;
+
+      await this.executeQuery(createSalesItemsTable);
+
+      // Create payments table
+      const createPaymentsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS payments (
+          id SERIAL PRIMARY KEY,
+          sale_id INTEGER REFERENCES sales(id),
+          payment_method VARCHAR(50) NOT NULL,
+          amount DECIMAL(10,2) NOT NULL,
+          transaction_reference VARCHAR(100),
+          processed_by INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS payments (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          sale_id INT,
+          payment_method VARCHAR(50) NOT NULL,
+          amount DECIMAL(10,2) NOT NULL,
+          transaction_reference VARCHAR(100),
+          processed_by INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (sale_id) REFERENCES sales(id)
+        )
+      `;
+
+      await this.executeQuery(createPaymentsTable);
+
+      // Create payment_methods table
+      const createPaymentMethodsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS payment_methods (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(50) NOT NULL,
+          enabled BOOLEAN DEFAULT TRUE
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS payment_methods (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(50) NOT NULL,
+          enabled BOOLEAN DEFAULT TRUE
+        )
+      `;
+
+      await this.executeQuery(createPaymentMethodsTable);
+
+      // Create settings table
+      const createSettingsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS settings (
+          id SERIAL PRIMARY KEY,
+          shop_name VARCHAR(100) DEFAULT 'My POS Shop',
+          shop_phone VARCHAR(20),
+          shop_email VARCHAR(100),
+          shop_address TEXT,
+          shop_city VARCHAR(50),
+          shop_state VARCHAR(50),
+          shop_zip_code VARCHAR(20),
+          tax_rate DECIMAL(5,2) DEFAULT 0.00,
+          currency VARCHAR(10) DEFAULT 'USD',
+          country_code VARCHAR(10) DEFAULT '+1',
+          warranty_period INTEGER DEFAULT 30,
+          warranty_terms TEXT,
+          receipt_footer TEXT,
+          business_registration VARCHAR(100),
+          tax_id VARCHAR(50),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       ` : `
-        CREATE TABLE IF NOT EXISTS inventory (
+        CREATE TABLE IF NOT EXISTS settings (
           id INT AUTO_INCREMENT PRIMARY KEY,
-          item_name VARCHAR(255) NOT NULL,
-          sku VARCHAR(100) UNIQUE NOT NULL,
-          barcode VARCHAR(255),
-          qr_code VARCHAR(255),
-          category VARCHAR(255),
-          brand VARCHAR(255),
-          supplier VARCHAR(255),
-          unit VARCHAR(50) DEFAULT 'pcs',
-          buy_price DECIMAL(10,2) NOT NULL,
-          sell_price DECIMAL(10,2) NOT NULL,
-          quantity INT NOT NULL DEFAULT 0,
-          min_stock INT DEFAULT 0,
-          max_stock INT DEFAULT 1000,
-          reorder_point INT DEFAULT 5,
-          reorder_quantity INT DEFAULT 20,
-          cost_price DECIMAL(10,2),
-          wholesale_price DECIMAL(10,2),
+          shop_name VARCHAR(100) DEFAULT 'My POS Shop',
+          shop_phone VARCHAR(20),
+          shop_email VARCHAR(100),
+          shop_address TEXT,
+          shop_city VARCHAR(50),
+          shop_state VARCHAR(50),
+          shop_zip_code VARCHAR(20),
           tax_rate DECIMAL(5,2) DEFAULT 0.00,
-          tax_exempt BOOLEAN DEFAULT FALSE,
-          expiry_date DATE,
-          manufacture_date DATE,
-          batch_number VARCHAR(100),
-          location VARCHAR(255),
-          weight DECIMAL(8,3),
-          dimensions VARCHAR(100),
-          description TEXT,
-          image_url VARCHAR(500),
-          status ENUM('active', 'inactive', 'discontinued') DEFAULT 'active',
-          track_serial BOOLEAN DEFAULT FALSE,
-          allow_negative_stock BOOLEAN DEFAULT FALSE,
+          currency VARCHAR(10) DEFAULT 'USD',
+          country_code VARCHAR(10) DEFAULT '+1',
+          warranty_period INT DEFAULT 30,
+          warranty_terms TEXT,
+          receipt_footer TEXT,
+          business_registration VARCHAR(100),
+          tax_id VARCHAR(50),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `;
-      
-      await this.executeQuery(inventoryTableSQL);
-      
-      // Location inventory table (moved after inventory table creation)
-      const locationInventoryTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS location_inventory (
-          id SERIAL PRIMARY KEY,
-          location_id INT NOT NULL,
-          item_id INT NOT NULL,
-          quantity INT NOT NULL DEFAULT 0,
-          min_stock INT DEFAULT 0,
-          max_stock INT DEFAULT 1000,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE CASCADE,
-          FOREIGN KEY (item_id) REFERENCES inventory (id) ON DELETE CASCADE,
-          UNIQUE(location_id, item_id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS location_inventory (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          location_id INT NOT NULL,
-          item_id INT NOT NULL,
-          quantity INT NOT NULL DEFAULT 0,
-          min_stock INT DEFAULT 0,
-          max_stock INT DEFAULT 1000,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE CASCADE,
-          FOREIGN KEY (item_id) REFERENCES inventory (id) ON DELETE CASCADE,
-          UNIQUE KEY unique_location_item (location_id, item_id)
-        )
-      `;
-      
-      await this.executeQuery(locationInventoryTableSQL);
 
-      // Inventory transfers table (moved after inventory table creation)
-      const transfersTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS inventory_transfers (
+      await this.executeQuery(createSettingsTable);
+
+      // Create user_sessions table for JWT token management
+      const createUserSessionsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS user_sessions (
           id SERIAL PRIMARY KEY,
-          from_location INT NOT NULL,
-          to_location INT NOT NULL,
-          item_id INT NOT NULL,
-          quantity INT NOT NULL,
-          transferred_by INT NOT NULL,
-          notes TEXT,
+          user_id INT NOT NULL,
+          token_hash VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (from_location) REFERENCES locations (id),
-          FOREIGN KEY (to_location) REFERENCES locations (id),
-          FOREIGN KEY (item_id) REFERENCES inventory (id),
-          FOREIGN KEY (transferred_by) REFERENCES users (id)
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )
       ` : `
-        CREATE TABLE IF NOT EXISTS inventory_transfers (
+        CREATE TABLE IF NOT EXISTS user_sessions (
           id INT AUTO_INCREMENT PRIMARY KEY,
-          from_location INT NOT NULL,
-          to_location INT NOT NULL,
-          item_id INT NOT NULL,
-          quantity INT NOT NULL,
-          transferred_by INT NOT NULL,
-          notes TEXT,
+          user_id INT NOT NULL,
+          token_hash VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (from_location) REFERENCES locations (id),
-          FOREIGN KEY (to_location) REFERENCES locations (id),
-          FOREIGN KEY (item_id) REFERENCES inventory (id),
-          FOREIGN KEY (transferred_by) REFERENCES users (id)
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )
       `;
+
+      await this.executeQuery(createUserSessionsTable);
+
+      // Run migrations to update existing tables
+      await this.runMigrations();
+
+      // Insert default data
+      await this.insertDefaultData();
+
+      console.log('Database tables initialized successfully');
+    } catch (error) {
+      console.error('Error initializing tables:', error);
+      throw error;
+    }
+  }
+
+  async runMigrations() {
+    try {
+      console.log('Running database migrations...');
       
-      await this.executeQuery(transfersTableSQL);
-      
-      // Add missing columns to existing inventory table if they don't exist (MySQL only)
+      // Migration: Add missing columns to customers table
+      const customerMigrations = [
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS date_of_birth DATE',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(10)',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_points INT DEFAULT 0',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_spent DECIMAL(12,2) DEFAULT 0.00',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS discount_percentage DECIMAL(5,2) DEFAULT 0.00',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT',
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\''
+      ];
+
+      // Migration: Add missing columns to sales table
+      const salesMigrations = [
+        'ALTER TABLE sales ADD COLUMN IF NOT EXISTS subtotal DECIMAL(10,2) DEFAULT 0.00'
+      ];
+
+      // Migration: Add missing columns to sales_items table
+      const salesItemsMigrations = [
+        'ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS sku VARCHAR(100)'
+      ];
+
+      // Migration: Add missing columns to inventory table
+      const inventoryMigrations = [
+        'ALTER TABLE inventory ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+      ];
+
+      // For MySQL, we need to check column existence before adding
       if (!isPostgreSQL) {
-        try {
-          await this.executeQuery('ALTER TABLE inventory ADD COLUMN category VARCHAR(255)');
-        } catch (err) {
-          // Column already exists, ignore error
+        // Helper function to check if column exists
+        const columnExists = async (tableName, columnName) => {
+          try {
+            const result = await this.executeQuery(
+              `SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+              [tableName, columnName]
+            );
+            return result[0].count > 0;
+          } catch (error) {
+            return false;
+          }
+        };
+
+        // MySQL migrations with existence checks
+        const mysqlMigrations = [
+          { table: 'customers', column: 'address', sql: 'ALTER TABLE customers ADD COLUMN address TEXT' },
+          { table: 'customers', column: 'date_of_birth', sql: 'ALTER TABLE customers ADD COLUMN date_of_birth DATE' },
+          { table: 'customers', column: 'gender', sql: 'ALTER TABLE customers ADD COLUMN gender ENUM(\'male\', \'female\', \'other\')' },
+          { table: 'customers', column: 'loyalty_points', sql: 'ALTER TABLE customers ADD COLUMN loyalty_points INT DEFAULT 0' },
+          { table: 'customers', column: 'total_spent', sql: 'ALTER TABLE customers ADD COLUMN total_spent DECIMAL(12,2) DEFAULT 0.00' },
+          { table: 'customers', column: 'discount_percentage', sql: 'ALTER TABLE customers ADD COLUMN discount_percentage DECIMAL(5,2) DEFAULT 0.00' },
+          { table: 'customers', column: 'notes', sql: 'ALTER TABLE customers ADD COLUMN notes TEXT' },
+          { table: 'customers', column: 'status', sql: 'ALTER TABLE customers ADD COLUMN status ENUM(\'active\', \'inactive\') DEFAULT \'active\'' },
+          { table: 'sales', column: 'subtotal', sql: 'ALTER TABLE sales ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0.00' },
+          { table: 'sales_items', column: 'sku', sql: 'ALTER TABLE sales_items ADD COLUMN sku VARCHAR(100)' },
+          { table: 'inventory', column: 'updated_at', sql: 'ALTER TABLE inventory ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' }
+        ];
+
+        for (const migration of mysqlMigrations) {
+          try {
+            const exists = await columnExists(migration.table, migration.column);
+            if (!exists) {
+              await this.executeQuery(migration.sql);
+              console.log(`Added column ${migration.column} to ${migration.table}`);
+            }
+          } catch (err) {
+            console.log(`Migration skipped for ${migration.table}.${migration.column}:`, err.message);
+          }
+        }
+      } else {
+        for (const migration of customerMigrations) {
+          try {
+            await this.executeQuery(migration);
+          } catch (err) {
+            // Ignore duplicate column errors
+            if (!err.message.includes('already exists')) {
+              console.log('Migration info:', err.message);
+            }
+          }
         }
         
-        try {
-          await this.executeQuery('ALTER TABLE inventory ADD COLUMN supplier VARCHAR(255)');
-        } catch (err) {
-          // Column already exists, ignore error
+        for (const migration of salesMigrations) {
+          try {
+            await this.executeQuery(migration);
+          } catch (err) {
+            // Ignore duplicate column errors
+            if (!err.message.includes('already exists')) {
+              console.log('Migration info:', err.message);
+            }
+          }
         }
         
-        try {
-          await this.executeQuery('ALTER TABLE inventory ADD COLUMN min_stock INT DEFAULT 0');
-        } catch (err) {
-          // Column already exists, ignore error
+        for (const migration of salesItemsMigrations) {
+          try {
+            await this.executeQuery(migration);
+          } catch (err) {
+            // Ignore duplicate column errors
+            if (!err.message.includes('already exists')) {
+              console.log('Migration info:', err.message);
+            }
+          }
         }
         
-        try {
-          await this.executeQuery('ALTER TABLE inventory ADD COLUMN description TEXT');
-        } catch (err) {
-          // Column already exists, ignore error
-        }
-        
-        try {
-          await this.executeQuery('ALTER TABLE inventory ADD COLUMN barcode VARCHAR(255)');
-        } catch (err) {
-          // Column already exists, ignore error
-        }
-      }
-
-      // Sales table (invoice header)
-      const salesTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS sales (
-          id SERIAL PRIMARY KEY,
-          invoice VARCHAR(100) UNIQUE NOT NULL,
-          date DATE NOT NULL,
-          customer_id INT,
-          customer_name VARCHAR(255),
-          customer_phone VARCHAR(50),
-          customer_email VARCHAR(255),
-          cashier_id INT,
-          cashier_name VARCHAR(255),
-          payment_method VARCHAR(50) DEFAULT 'cash',
-          payment_reference VARCHAR(255),
-          payment_status VARCHAR(20) CHECK (payment_status IN ('pending', 'processing', 'completed', 'failed', 'refunded')) DEFAULT 'pending',
-          subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
-          tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          discount_type VARCHAR(20) CHECK (discount_type IN ('fixed', 'percentage')) DEFAULT 'fixed',
-          total_amount DECIMAL(10,2) NOT NULL,
-          paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          change_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          loyalty_points_earned INT DEFAULT 0,
-          loyalty_points_redeemed INT DEFAULT 0,
-          status VARCHAR(20) CHECK (status IN ('paid', 'unpaid', 'partial', 'cancelled', 'refunded')) NOT NULL,
-          notes TEXT,
-          receipt_printed BOOLEAN DEFAULT FALSE,
-          voided BOOLEAN DEFAULT FALSE,
-          voided_by INT,
-          voided_at TIMESTAMP,
-          void_reason TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (customer_id) REFERENCES customers (id),
-          FOREIGN KEY (cashier_id) REFERENCES users (id),
-          FOREIGN KEY (voided_by) REFERENCES users (id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS sales (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          invoice VARCHAR(100) UNIQUE NOT NULL,
-          date DATE NOT NULL,
-          customer_id INT,
-          customer_name VARCHAR(255),
-          customer_phone VARCHAR(50),
-          customer_email VARCHAR(255),
-          cashier_id INT,
-          cashier_name VARCHAR(255),
-          payment_method VARCHAR(50) DEFAULT 'cash',
-          payment_reference VARCHAR(255),
-          payment_status ENUM('pending', 'processing', 'completed', 'failed', 'refunded') DEFAULT 'pending',
-          subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
-          tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          discount_type ENUM('fixed', 'percentage') DEFAULT 'fixed',
-          total_amount DECIMAL(10,2) NOT NULL,
-          paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          change_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          loyalty_points_earned INT DEFAULT 0,
-          loyalty_points_redeemed INT DEFAULT 0,
-          status ENUM('paid', 'unpaid', 'partial', 'cancelled', 'refunded') NOT NULL,
-          notes TEXT,
-          receipt_printed BOOLEAN DEFAULT FALSE,
-          voided BOOLEAN DEFAULT FALSE,
-          voided_by INT,
-          voided_at TIMESTAMP NULL,
-          void_reason TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          FOREIGN KEY (customer_id) REFERENCES customers (id),
-          FOREIGN KEY (cashier_id) REFERENCES users (id),
-          FOREIGN KEY (voided_by) REFERENCES users (id)
-        )
-      `;
-      
-      await this.executeQuery(salesTableSQL);
-
-      // Sales items table (invoice line items)
-      const salesItemsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS sales_items (
-          id SERIAL PRIMARY KEY,
-          sale_id INT NOT NULL,
-          item_id INT NOT NULL,
-          item_name VARCHAR(255) NOT NULL,
-          sku VARCHAR(100) NOT NULL,
-          quantity INT NOT NULL,
-          unit_price DECIMAL(10,2) NOT NULL,
-          line_total DECIMAL(10,2) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-          FOREIGN KEY (item_id) REFERENCES inventory (id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS sales_items (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          sale_id INT NOT NULL,
-          item_id INT NOT NULL,
-          item_name VARCHAR(255) NOT NULL,
-          sku VARCHAR(100) NOT NULL,
-          quantity INT NOT NULL,
-          unit_price DECIMAL(10,2) NOT NULL,
-          line_total DECIMAL(10,2) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-          FOREIGN KEY (item_id) REFERENCES inventory (id)
-        )
-      `;
-      
-      await this.executeQuery(salesItemsTableSQL);
-
-      // Payments table
-      const paymentsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS payments (
-          id SERIAL PRIMARY KEY,
-          sale_id INT NOT NULL,
-          payment_method VARCHAR(50) NOT NULL,
-          amount DECIMAL(10,2) NOT NULL,
-          transaction_id VARCHAR(255),
-          payment_status VARCHAR(20) CHECK (payment_status IN ('pending', 'processing', 'completed', 'failed', 'refunded')) DEFAULT 'pending',
-          stripe_payment_intent VARCHAR(255),
-          notes TEXT,
-          processed_by INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-          FOREIGN KEY (processed_by) REFERENCES users (id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS payments (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          sale_id INT NOT NULL,
-          payment_method VARCHAR(50) NOT NULL,
-          amount DECIMAL(10,2) NOT NULL,
-          transaction_id VARCHAR(255),
-          payment_status ENUM('pending', 'processing', 'completed', 'failed', 'refunded') DEFAULT 'pending',
-          stripe_payment_intent VARCHAR(255),
-          notes TEXT,
-          processed_by INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-          FOREIGN KEY (processed_by) REFERENCES users (id)
-        )
-      `;
-      
-      await this.executeQuery(paymentsTableSQL);
-
-      // Add processed_by column to existing payments table if it doesn't exist
-      if (!isPostgreSQL) {
-        try {
-          await this.executeQuery(`ALTER TABLE payments ADD COLUMN processed_by INT`);
-          await this.executeQuery(`ALTER TABLE payments ADD FOREIGN KEY (processed_by) REFERENCES users (id)`);
-        } catch (err) {
-          // Column already exists, ignore error
-          if (!err.message.includes('Duplicate column name')) {
-            console.log('Note: payments table processed_by column may already exist');
+        for (const migration of inventoryMigrations) {
+          try {
+            await this.executeQuery(migration);
+          } catch (err) {
+            // Ignore duplicate column errors
+            if (!err.message.includes('already exists')) {
+              console.log('Migration info:', err.message);
+            }
           }
         }
       }
 
-      // Refunds table
-      const refundsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS refunds (
-          id SERIAL PRIMARY KEY,
-          payment_id INT NOT NULL,
-          sale_id INT NOT NULL,
-          amount DECIMAL(10,2) NOT NULL,
-          reason TEXT,
-          refund_status VARCHAR(20) CHECK (refund_status IN ('pending', 'processing', 'completed', 'failed')) DEFAULT 'pending',
-          stripe_refund_id VARCHAR(255),
-          processed_by INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (payment_id) REFERENCES payments (id) ON DELETE CASCADE,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-          FOREIGN KEY (processed_by) REFERENCES users (id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS refunds (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          payment_id INT NOT NULL,
-          sale_id INT NOT NULL,
-          amount DECIMAL(10,2) NOT NULL,
-          reason TEXT,
-          refund_status ENUM('pending', 'processing', 'completed', 'failed') DEFAULT 'pending',
-          stripe_refund_id VARCHAR(255),
-          processed_by INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (payment_id) REFERENCES payments (id) ON DELETE CASCADE,
-          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-          FOREIGN KEY (processed_by) REFERENCES users (id)
-        )
-      `;
-      
-      await this.executeQuery(refundsTableSQL);
+      console.log('Database migrations completed successfully');
+    } catch (error) {
+      console.error('Error running migrations:', error);
+      // Don't throw error to prevent initialization failure
+    }
+  }
 
-      // Tax rates table
-      const taxRatesTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS tax_rates (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(100) NOT NULL,
-          rate DECIMAL(5,2) NOT NULL,
-          type VARCHAR(20) CHECK (type IN ('inclusive', 'exclusive')) DEFAULT 'exclusive',
-          status VARCHAR(20) CHECK (status IN ('active', 'inactive')) DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS tax_rates (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(100) NOT NULL,
-          rate DECIMAL(5,2) NOT NULL,
-          type ENUM('inclusive', 'exclusive') DEFAULT 'exclusive',
-          status ENUM('active', 'inactive') DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `;
-      
-      await this.executeQuery(taxRatesTableSQL);
+  async insertDefaultData() {
+    try {
+      // Insert default users
+      const checkUsersSQL = 'SELECT COUNT(*) as count FROM users';
+      const userCountResult = await this.executeQuery(checkUsersSQL);
+      const userCount = isPostgreSQL ? userCountResult.rows[0].count : userCountResult[0].count;
 
-      // Payment methods table
-      const paymentMethodsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS payment_methods (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(100) NOT NULL,
-          type VARCHAR(50) NOT NULL,
-          enabled BOOLEAN DEFAULT TRUE,
-          config JSONB DEFAULT '{}',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS payment_methods (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(100) NOT NULL,
-          type VARCHAR(50) NOT NULL,
-          enabled BOOLEAN DEFAULT TRUE,
-          config JSON,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `;
-      
-      await this.executeQuery(paymentMethodsTableSQL);
+      if (userCount == 0) {
+        const bcrypt = require('bcryptjs');
+        const adminPassword = await bcrypt.hash('admin123', 10);
+        const managerPassword = await bcrypt.hash('manager123', 10);
+        const cashierPassword = await bcrypt.hash('cashier123', 10);
+        const salesPassword = await bcrypt.hash('sales123', 10);
+
+        const insertUsersSQL = isPostgreSQL ? `
+          INSERT INTO users (username, email, password_hash, full_name, role, status, phone, department, position) VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9),
+          ($10, $11, $12, $13, $14, $15, $16, $17, $18),
+          ($19, $20, $21, $22, $23, $24, $25, $26, $27),
+          ($28, $29, $30, $31, $32, $33, $34, $35, $36)
+        ` : `
+          INSERT IGNORE INTO users (username, email, password_hash, full_name, role, status, phone, department, position) VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertUsersSQL, [
+          'admin', 'admin@example.com', adminPassword, 'System Administrator', 'admin', 'active', '+1234567890', 'Management', 'Administrator',
+          'manager', 'manager@example.com', managerPassword, 'Store Manager', 'manager', 'active', '+1234567891', 'Management', 'Store Manager',
+          'cashier', 'cashier@example.com', cashierPassword, 'Cashier User', 'cashier', 'active', '+1234567892', 'Sales', 'Cashier',
+          'sales', 'sales@example.com', salesPassword, 'Sales Representative', 'cashier', 'active', '+1234567893', 'Sales', 'Sales Rep'
+        ]);
+      }
+
+      // Insert default customers
+      const checkCustomersSQL = 'SELECT COUNT(*) as count FROM customers';
+      const customerCountResult = await this.executeQuery(checkCustomersSQL);
+      const customerCount = isPostgreSQL ? customerCountResult.rows[0].count : customerCountResult[0].count;
+
+      if (customerCount == 0) {
+        const insertCustomersSQL = isPostgreSQL ? `
+          INSERT INTO customers (customer_code, name, email, phone, address, date_of_birth, gender, loyalty_points, total_spent, discount_percentage, notes, status) VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12),
+          ($13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24),
+          ($25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36),
+          ($37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48),
+          ($49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60)
+        ` : `
+          INSERT INTO customers (customer_code, name, email, phone, address, date_of_birth, gender, loyalty_points, total_spent, discount_percentage, notes, status) VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertCustomersSQL, [
+          'CUST001', 'John Smith', 'john.smith@email.com', '+1234567801', '123 Main St, City, State 12345', '1985-03-15', 'male', 150, 1250.75, 5.0, 'VIP customer, prefers morning appointments', 'active',
+          'CUST002', 'Sarah Johnson', 'sarah.johnson@email.com', '+1234567802', '456 Oak Ave, City, State 12346', '1990-07-22', 'female', 75, 890.50, 0.0, 'Regular customer, likes product recommendations', 'active',
+          'CUST003', 'Michael Brown', 'michael.brown@email.com', '+1234567803', '789 Pine Rd, City, State 12347', '1978-11-08', 'male', 200, 2150.25, 10.0, 'Bulk buyer, corporate account', 'active',
+          'CUST004', 'Emily Davis', 'emily.davis@email.com', '+1234567804', '321 Elm St, City, State 12348', '1995-01-30', 'female', 25, 345.00, 0.0, 'New customer, referred by Sarah Johnson', 'active',
+          'CUST005', 'David Wilson', 'david.wilson@email.com', '+1234567805', '654 Maple Dr, City, State 12349', '1982-09-12', 'male', 100, 750.80, 2.5, 'Seasonal customer, prefers email communication', 'active'
+        ]);
+      }
+
+      // Insert default partners
+      const checkPartnersSQL = 'SELECT COUNT(*) as count FROM partners';
+      const partnerCountResult = await this.executeQuery(checkPartnersSQL);
+      const partnerCount = isPostgreSQL ? partnerCountResult.rows[0].count : partnerCountResult[0].count;
+
+      if (partnerCount == 0) {
+        const insertPartnersSQL = isPostgreSQL ? `
+          INSERT INTO partners (name, type, phone_no) VALUES
+          ($1, $2, $3),
+          ($4, $5, $6),
+          ($7, $8, $9)
+        ` : `
+          INSERT INTO partners (name, type, phone_no) VALUES
+          (?, ?, ?),
+          (?, ?, ?),
+          (?, ?, ?)
+        `;
+
+        await this.executeQuery(insertPartnersSQL, [
+          'Tech Supplies Inc', 'supplier', '+1555001001',
+          'Global Electronics', 'supplier', '+1555001002',
+          'Investment Partners LLC', 'investor', '+1555001003'
+        ]);
+      }
+
+      // Insert default investments
+      const checkInvestmentsSQL = 'SELECT COUNT(*) as count FROM investments';
+      const investmentCountResult = await this.executeQuery(checkInvestmentsSQL);
+      const investmentCount = isPostgreSQL ? investmentCountResult.rows[0].count : investmentCountResult[0].count;
+
+      if (investmentCount == 0) {
+        const insertInvestmentsSQL = isPostgreSQL ? `
+          INSERT INTO investments (partner_id, partner_name, amount, type, notes) VALUES
+          ($1, $2, $3, $4, $5),
+          ($6, $7, $8, $9, $10)
+        ` : `
+          INSERT INTO investments (partner_id, partner_name, amount, type, notes) VALUES
+          (?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertInvestmentsSQL, [
+          3, 'Investment Partners LLC', 50000.00, 'equity', 'Initial seed funding for business expansion',
+          3, 'Investment Partners LLC', 25000.00, 'loan', 'Equipment purchase loan at 5% interest'
+        ]);
+      }
+
+      // Insert default inventory items
+      const checkInventorySQL = 'SELECT COUNT(*) as count FROM inventory';
+      const inventoryCountResult = await this.executeQuery(checkInventorySQL);
+      const inventoryCount = isPostgreSQL ? inventoryCountResult.rows[0].count : inventoryCountResult[0].count;
+
+      if (inventoryCount == 0) {
+        const insertInventorySQL = isPostgreSQL ? `
+          INSERT INTO inventory (item_name, sku, category, supplier, quantity, min_stock, unit_price, sell_price, buy_price, description, barcode, warranty_days) VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12),
+          ($13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24),
+          ($25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36),
+          ($37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48),
+          ($49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60),
+          ($61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72)
+        ` : `
+          INSERT INTO inventory (item_name, sku, category, supplier, quantity, min_stock, unit_price, sell_price, buy_price, description, barcode, warranty_days) VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertInventorySQL, [
+          'Wireless Mouse', 'WM001', 'Electronics', 'Tech Supplies Inc', 50, 10, 15.99, 24.99, 12.00, 'Ergonomic wireless mouse with USB receiver', '1234567890123', 365,
+          'Bluetooth Keyboard', 'KB001', 'Electronics', 'Tech Supplies Inc', 30, 5, 45.99, 69.99, 38.00, 'Compact bluetooth keyboard for all devices', '1234567890124', 365,
+          'USB-C Cable', 'CB001', 'Accessories', 'Global Electronics', 100, 20, 8.99, 14.99, 6.50, 'High-speed USB-C charging and data cable', '1234567890125', 180,
+          'Laptop Stand', 'LS001', 'Accessories', 'Tech Supplies Inc', 25, 5, 29.99, 49.99, 22.00, 'Adjustable aluminum laptop stand', '1234567890126', 730,
+          'Webcam HD', 'WC001', 'Electronics', 'Global Electronics', 15, 3, 59.99, 89.99, 48.00, '1080p HD webcam with built-in microphone', '1234567890127', 365,
+          'Phone Case', 'PC001', 'Accessories', 'Tech Supplies Inc', 75, 15, 12.99, 19.99, 9.50, 'Protective silicone phone case', '1234567890128', 90
+        ]);
+      }
 
       // Insert default payment methods
-      const paymentMethodsCount = await this.executeQuery('SELECT COUNT(*) as count FROM payment_methods');
-      const pmCount = isPostgreSQL ? paymentMethodsCount.rows[0].count : paymentMethodsCount[0].count;
-      
-      if (pmCount === 0) {
-        try {
-          const defaultPaymentMethods = [
-            ['Cash', 'cash', true, '{}'],
-            ['Credit Card', 'card', true, '{}'],
-            ['Debit Card', 'card', true, '{}'],
-            ['Mobile Payment', 'digital', true, '{}'],
-            ['Bank Transfer', 'transfer', true, '{}']
-          ];
-          
-          for (const method of defaultPaymentMethods) {
-            await this.executeQuery(
-              'INSERT INTO payment_methods (name, type, enabled, config) VALUES (?, ?, ?, ?)',
-              method
-            );
-          }
-        } catch (err) {
-          if (!err.message.includes('Duplicate entry')) {
-            console.error('Error inserting default payment methods:', err);
-          }
-        }
+      const checkPaymentMethodsSQL = 'SELECT COUNT(*) as count FROM payment_methods';
+      const paymentMethodCountResult = await this.executeQuery(checkPaymentMethodsSQL);
+      const paymentMethodCount = isPostgreSQL ? paymentMethodCountResult.rows[0].count : paymentMethodCountResult[0].count;
+
+      if (paymentMethodCount == 0) {
+        const insertPaymentMethodsSQL = isPostgreSQL ? `
+          INSERT INTO payment_methods (name, enabled) VALUES
+          ($1, $2),
+          ($3, $4),
+          ($5, $6),
+          ($7, $8),
+          ($9, $10)
+        ` : `
+          INSERT INTO payment_methods (name, enabled) VALUES
+          (?, ?),
+          (?, ?),
+          (?, ?),
+          (?, ?),
+          (?, ?)
+        `;
+
+        await this.executeQuery(insertPaymentMethodsSQL, [
+          'Cash', true,
+          'Credit Card', true,
+          'Debit Card', true,
+          'Mobile Payment', true,
+          'Bank Transfer', false
+        ]);
       }
 
-      // Categories table
-      const categoriesTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS categories (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          parent_id INT,
-          status VARCHAR(20) CHECK (status IN ('active', 'inactive')) DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (parent_id) REFERENCES categories (id)
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS categories (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          parent_id INT,
-          status ENUM('active', 'inactive') DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (parent_id) REFERENCES categories (id)
-        )
-      `;
-      
-      await this.executeQuery(categoriesTableSQL);
+      // Insert sample sales
+      const checkSalesSQL = 'SELECT COUNT(*) as count FROM sales';
+      const salesCountResult = await this.executeQuery(checkSalesSQL);
+      const salesCount = isPostgreSQL ? salesCountResult.rows[0].count : salesCountResult[0].count;
 
-      // Suppliers table  
-      const suppliersTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS suppliers (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          contact_person VARCHAR(255),
-          email VARCHAR(255),
-          phone VARCHAR(50),
-          address TEXT,
-          tax_number VARCHAR(100),
-          payment_terms TEXT,
-          status VARCHAR(20) CHECK (status IN ('active', 'inactive')) DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS suppliers (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          contact_person VARCHAR(255),
-          email VARCHAR(255),
-          phone VARCHAR(50),
-          address TEXT,
-          tax_number VARCHAR(100),
-          payment_terms TEXT,
-          status ENUM('active', 'inactive') DEFAULT 'active',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `;
-      
-      await this.executeQuery(suppliersTableSQL);
+      if (salesCount == 0) {
+        const insertSalesSQL = isPostgreSQL ? `
+          INSERT INTO sales (invoice, date, customer_id, customer_name, customer_phone, total_amount, paid_amount, tax_amount, discount_amount, status) VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10),
+          ($11, $12, $13, $14, $15, $16, $17, $18, $19, $20),
+          ($21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        ` : `
+          INSERT INTO sales (invoice, date, customer_id, customer_name, customer_phone, total_amount, paid_amount, tax_amount, discount_amount, status) VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
 
-      // System settings table with dedicated columns
-      const settingsTableSQL = isPostgreSQL ? `
-        CREATE TABLE IF NOT EXISTS settings (
-          id SERIAL PRIMARY KEY,
-          shopName VARCHAR(255) DEFAULT 'My POS Shop',
-          shopPhone VARCHAR(50) DEFAULT '',
-          shopEmail VARCHAR(255) DEFAULT '',
-          shopAddress TEXT,
-          shopCity VARCHAR(100) DEFAULT '',
-          shopState VARCHAR(100) DEFAULT '',
-          shopZipCode VARCHAR(20) DEFAULT '',
-          shopLogoUrl VARCHAR(500) DEFAULT '',
-          taxRate DECIMAL(5,2) DEFAULT 0,
-          currency VARCHAR(10) DEFAULT 'USD',
-          countryCode VARCHAR(10) DEFAULT '+94',
-          warrantyPeriod INT DEFAULT 30,
-          warrantyTerms TEXT,
-          receiptFooter TEXT,
-          businessRegistration VARCHAR(255) DEFAULT '',
-          taxId VARCHAR(255) DEFAULT '',
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      ` : `
-        CREATE TABLE IF NOT EXISTS settings (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          shopName VARCHAR(255) DEFAULT 'My POS Shop',
-          shopPhone VARCHAR(50) DEFAULT '',
-          shopEmail VARCHAR(255) DEFAULT '',
-          shopAddress TEXT,
-          shopCity VARCHAR(100) DEFAULT '',
-          shopState VARCHAR(100) DEFAULT '',
-          shopZipCode VARCHAR(20) DEFAULT '',
-          shopLogoUrl VARCHAR(500) DEFAULT '',
-          taxRate DECIMAL(5,2) DEFAULT 0,
-          currency VARCHAR(10) DEFAULT 'USD',
-          countryCode VARCHAR(10) DEFAULT '+94',
-          warrantyPeriod INT DEFAULT 30,
-          warrantyTerms TEXT,
-          receiptFooter TEXT,
-          businessRegistration VARCHAR(255) DEFAULT '',
-          taxId VARCHAR(255) DEFAULT '',
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `;
-      
-      await this.executeQuery(settingsTableSQL);
-
-      // Insert default settings if none exist
-      const settingsCount = await this.executeQuery('SELECT COUNT(*) as count FROM settings');
-      const sCount = isPostgreSQL ? settingsCount.rows[0].count : settingsCount[0].count;
-      
-      if (sCount === 0) {
-        try {
-          const insertSettingsSQL = `INSERT INTO settings (
-            shopName, shopPhone, shopEmail, shopAddress, shopCity, shopState, shopZipCode, shopLogoUrl,
-            taxRate, currency, countryCode, warrantyPeriod, warrantyTerms, receiptFooter,
-            businessRegistration, taxId
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-          
-          await this.executeQuery(insertSettingsSQL, [
-            'My POS Shop', '', '', '', '', '', '', '',
-            0, 'USD', '+94', 30, 'Standard warranty terms apply. Items must be returned in original condition.',
-            'Thank you for your business!', '', ''
-          ]);
-          
-          console.log('Default settings created successfully');
-        } catch (err) {
-          if (!err.message.includes('Duplicate entry')) {
-            console.error('Error inserting default settings:', err);
-          }
-        }
+        await this.executeQuery(insertSalesSQL, [
+          'INV001', '2024-01-15', 1, 'John Smith', '+1234567801', 94.97, 94.97, 7.60, 0.00, 'paid',
+          'INV002', '2024-01-16', 2, 'Sarah Johnson', '+1234567802', 14.99, 14.99, 1.20, 5.00, 'paid',
+          'INV003', '2024-01-17', null, 'Walk-in Customer', null, 49.99, 0.00, 4.00, 0.00, 'unpaid'
+        ]);
       }
 
-      // Add sample inventory data
-      const inventoryCount = await this.executeQuery('SELECT COUNT(*) as count FROM inventory');
-      const invCount = isPostgreSQL ? inventoryCount.rows[0].count : inventoryCount[0].count;
-      
-      if (invCount === 0) {
-        try {
-          const sampleInventory = [
-            ['Sample Product 1', 'SKU001', '1234567890123', '', 'Electronics', 'Samsung', 'Tech Supplier', 'pcs', 100.00, 150.00, 50, 5, 100],
-            ['Sample Product 2', 'SKU002', '2345678901234', '', 'Clothing', 'Nike', 'Fashion Supplier', 'pcs', 50.00, 80.00, 30, 3, 50],
-            ['Sample Product 3', 'SKU003', '3456789012345', '', 'Food', 'Nestle', 'Food Supplier', 'pcs', 20.00, 35.00, 100, 10, 200]
-          ];
-          
-          const insertInventorySQL = `INSERT INTO inventory (
-            item_name, sku, barcode, qr_code, category, brand, supplier, unit, buy_price, sell_price, quantity, min_stock, max_stock
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-          
-          for (const item of sampleInventory) {
-            await this.executeQuery(insertInventorySQL, item);
-          }
-          
-          console.log('Sample inventory data created successfully');
-        } catch (err) {
-          if (!err.message.includes('Duplicate entry')) {
-            console.error('Error inserting sample inventory:', err);
-          }
-        }
+      // Insert sample sales items
+      const checkSalesItemsSQL = 'SELECT COUNT(*) as count FROM sales_items';
+      const salesItemsCountResult = await this.executeQuery(checkSalesItemsSQL);
+      const salesItemsCount = isPostgreSQL ? salesItemsCountResult.rows[0].count : salesItemsCountResult[0].count;
+
+      if (salesItemsCount == 0) {
+        const insertSalesItemsSQL = isPostgreSQL ? `
+          INSERT INTO sales_items (sale_id, item_id, item_name, quantity, unit_price, line_total) VALUES
+          ($1, $2, $3, $4, $5, $6),
+          ($7, $8, $9, $10, $11, $12),
+          ($13, $14, $15, $16, $17, $18),
+          ($19, $20, $21, $22, $23, $24),
+          ($25, $26, $27, $28, $29, $30)
+        ` : `
+          INSERT INTO sales_items (sale_id, item_id, item_name, quantity, unit_price, line_total) VALUES
+          (?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertSalesItemsSQL, [
+          1, 1, 'Wireless Mouse', 2, 24.99, 49.98,
+          1, 2, 'Bluetooth Keyboard', 1, 69.99, 69.99,
+          2, 3, 'USB-C Cable', 1, 14.99, 14.99,
+          3, 4, 'Laptop Stand', 1, 49.99, 49.99,
+          1, 3, 'USB-C Cable', 1, 14.99, 14.99
+        ]);
       }
 
-      // Add sample customer data
-      const customerCount = await this.executeQuery('SELECT COUNT(*) as count FROM customers');
-      const custCount = isPostgreSQL ? customerCount.rows[0].count : customerCount[0].count;
-      
-      if (custCount === 0) {
-        try {
-          const sampleCustomers = [
-            ['CUST001', 'W.A.R.K Weerasooriya', 'wark@example.com', '0768472903', '123 Main St, Colombo', null, 'male', 0, 0.00, 0.00, '', 'active'],
-            ['CUST002', 'John Doe', 'john@example.com', '0771234567', '456 Oak Ave, Kandy', null, 'male', 50, 250.00, 5.00, '', 'active'],
-            ['CUST003', 'Jane Smith', 'jane@example.com', '0779876543', '789 Pine Rd, Galle', null, 'female', 25, 125.00, 0.00, '', 'active']
-          ];
-          
-          const insertCustomerSQL = `INSERT INTO customers (
-            customer_code, name, email, phone, address, date_of_birth, gender, loyalty_points, total_spent, discount_percentage, notes, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-          
-          for (const customer of sampleCustomers) {
-            await this.executeQuery(insertCustomerSQL, customer);
-          }
-          
-          console.log('Sample customer data created successfully');
-        } catch (err) {
-          if (!err.message.includes('Duplicate entry')) {
-            console.error('Error inserting sample customers:', err);
-          }
-        }
+      // Insert sample payments
+      const checkPaymentsSQL = 'SELECT COUNT(*) as count FROM payments';
+      const paymentsCountResult = await this.executeQuery(checkPaymentsSQL);
+      const paymentsCount = isPostgreSQL ? paymentsCountResult.rows[0].count : paymentsCountResult[0].count;
+
+      if (paymentsCount == 0) {
+        const insertPaymentsSQL = isPostgreSQL ? `
+          INSERT INTO payments (sale_id, payment_method, amount, transaction_reference, processed_by) VALUES
+          ($1, $2, $3, $4, $5),
+          ($6, $7, $8, $9, $10)
+        ` : `
+          INSERT INTO payments (sale_id, payment_method, amount, transaction_reference, processed_by) VALUES
+          (?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertPaymentsSQL, [
+          1, 'Credit Card', 94.97, 'CC123456789', 3,
+          2, 'Cash', 14.99, 'CASH001', 3
+        ]);
       }
 
-      console.log('Database tables initialized.');
-    } catch (err) {
-      console.error('Error creating tables:', err);
-      throw err;
+      // Insert default settings
+      const checkSettingsSQL = 'SELECT COUNT(*) as count FROM settings';
+      const settingsCountResult = await this.executeQuery(checkSettingsSQL);
+      const settingsCount = isPostgreSQL ? settingsCountResult.rows[0].count : settingsCountResult[0].count;
+
+      if (settingsCount == 0) {
+        const warrantyTerms = 'Standard warranty terms apply. Items can be returned within the warranty period with proof of purchase.';
+        const receiptFooter = 'Thank you for your business! Visit us again soon.';
+
+        const insertSettingsSQL = isPostgreSQL ? `
+          INSERT INTO settings (
+            shop_name, shop_phone, shop_email, shop_address, shop_city, shop_state, shop_zip_code,
+            tax_rate, currency, country_code, warranty_period, 
+            warranty_terms, receipt_footer, business_registration, tax_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ` : `
+          INSERT INTO settings (
+            shop_name, shop_phone, shop_email, shop_address, shop_city, shop_state, shop_zip_code,
+            tax_rate, currency, country_code, warranty_period, 
+            warranty_terms, receipt_footer, business_registration, tax_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertSettingsSQL, [
+          'TechStore POS', '+1-555-123-4567', 'info@techstore.com', '123 Main Street', 'New York', 'NY', '10001',
+          8.25, 'USD', '+1', 30, 
+          warrantyTerms, receiptFooter, 'REG123456789', 'TAX987654321'
+        ]);
+      }
+
+      console.log('Comprehensive mock data inserted successfully');
+    } catch (error) {
+      console.error('Error inserting default data:', error);
+      throw error;
     }
   }
 
@@ -1044,14 +902,22 @@ class Database {
 
   async close() {
     if (this.db) {
-      try {
+      if (isPostgreSQL) {
         await this.db.end();
-        console.log('Database connection closed.');
-      } catch (err) {
-        console.error('Error closing database:', err.message);
+      } else {
+        await this.db.end();
       }
     }
   }
+  
+  static getInstance() {
+    if (!Database.instance) {
+      Database.instance = new Database();
+    }
+    return Database.instance;
+  }
 }
+
+Database.instance = null;
 
 module.exports = Database;

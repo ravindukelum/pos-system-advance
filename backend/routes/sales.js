@@ -1,10 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const database = require('../database/db');
+const Database = require('../database/db');
 const router = express.Router();
 
 // Create database instance
-const dbInstance = new database();
+const dbInstance = Database.getInstance();
 let db;
 
 // Initialize database connection
@@ -76,7 +76,13 @@ router.get('/status/:status', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const saleSql = 'SELECT * FROM sales WHERE id = ?';
-    const itemsSql = 'SELECT * FROM sales_items WHERE sale_id = ? ORDER BY created_at';
+    const itemsSql = `
+      SELECT si.*, i.warranty_days 
+      FROM sales_items si 
+      LEFT JOIN inventory i ON si.item_id = i.id 
+      WHERE si.sale_id = ? 
+      ORDER BY si.created_at
+    `;
     
     const [saleRows] = await db.execute(saleSql, [req.params.id]);
     const sale = saleRows[0];
@@ -239,7 +245,7 @@ router.post('/', async (req, res) => {
       ]);
       
       // Update inventory
-      const updateInventorySql = 'UPDATE inventory SET quantity = quantity - ?, updated_at = NOW() WHERE id = ?';
+      const updateInventorySql = 'UPDATE inventory SET quantity = quantity - ? WHERE id = ?';
       await db.execute(updateInventorySql, [saleItem.quantity, saleItem.item_id]);
     }
     
@@ -296,7 +302,7 @@ router.patch('/:id/payment', async (req, res) => {
       status = 'partial';
     }
     
-    const updateSql = 'UPDATE sales SET paid_amount = ?, status = ?, updated_at = NOW() WHERE id = ?';
+    const updateSql = 'UPDATE sales SET paid_amount = ?, status = ? WHERE id = ?';
     
     await db.execute(updateSql, [paid_amount, status, req.params.id]);
     
@@ -319,6 +325,10 @@ router.delete('/:id', async (req, res) => {
     const getItemsSql = 'SELECT * FROM sales_items WHERE sale_id = ?';
     const [items] = await db.execute(getItemsSql, [req.params.id]);
     
+    // Delete related payment records first
+    const deletePaymentsSql = 'DELETE FROM payments WHERE sale_id = ?';
+    await db.execute(deletePaymentsSql, [req.params.id]);
+    
     // Delete sale (cascade will delete items)
     const deleteSql = 'DELETE FROM sales WHERE id = ?';
     const [result] = await db.execute(deleteSql, [req.params.id]);
@@ -331,7 +341,7 @@ router.delete('/:id', async (req, res) => {
     
     // Restore inventory for each item
     for (const item of items) {
-      const restoreInventorySql = 'UPDATE inventory SET quantity = quantity + ?, updated_at = NOW() WHERE id = ?';
+      const restoreInventorySql = 'UPDATE inventory SET quantity = quantity + ? WHERE id = ?';
       await db.execute(restoreInventorySql, [item.quantity, item.item_id]);
     }
     

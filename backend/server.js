@@ -12,7 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Initialize database
-const database = new Database();
+const database = Database.getInstance();
 database.initialize().then(() => {
   console.log('Database initialized successfully');
 }).catch(err => {
