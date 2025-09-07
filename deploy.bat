@@ -1,8 +1,8 @@
 @echo off
-REM QOrder POS System - cPanel Deployment Script for Windows
+REM efix solution POS System - cPanel Deployment Script for Windows
 REM This script automates the deployment process for cPanel hosting
 
-echo 🚀 Starting QOrder POS System Deployment...
+echo 🚀 Starting efix solution POS System Deployment...
 echo.
 
 REM Check if Node.js is installed

@@ -1,7 +1,7 @@
 {
-  "name": "pos-backend",
+  "name": "efix-solution-backend",
   "version": "1.0.0",
-  "description": "Backend API for POS System",
+  "description": "Backend API for efix solution POS System",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

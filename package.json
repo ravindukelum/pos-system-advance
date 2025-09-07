@@ -1,7 +1,7 @@
 {
-  "name": "qorder-pos-system",
+  "name": "efix-solution-pos-system",
   "version": "1.0.0",
-  "description": "QOrder POS System - Complete Point of Sale Solution",
+  "description": "efix solution POS System - Complete Point of Sale Solution",
   "main": "backend/server.js",
   "scripts": {
     "start": "cd backend && npm start",
@@ -22,7 +22,7 @@
     "nodejs",
     "mysql"
   ],
-  "author": "QOrder Team",
+  "author": "efix solution Team",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^7.6.0"

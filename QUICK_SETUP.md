@@ -1,4 +1,4 @@
-# QOrder POS System - Quick Setup Guide
+# efix solution POS System - Quick Setup Guide
 
 ## 🚀 Quick Start for cPanel Deployment
 
@@ -11,11 +11,11 @@
 ### 1. Download & Extract
 ```bash
 # Option A: Git Clone (Recommended)
-git clone [your-repo-url] qorder
-cd qorder
+git clone [your-repo-url] efix-solution
+cd efix-solution
 git checkout cpanel-deployment
 
-# Option B: Download ZIP and extract to public_html/qorder/
+# Option B: Download ZIP and extract to public_html/efix-solution/
 ```
 
 ### 2. Run Deployment Script
@@ -29,7 +29,7 @@ deploy.bat
 
 ### 3. Configure Database
 1. **cPanel → MySQL Databases**
-2. Create database: `username_qorder`
+2. Create database: `username_efix`
 3. Create user: `username_dbuser`
 4. Add user to database with ALL PRIVILEGES
 
@@ -42,7 +42,7 @@ Update these values:
 ```env
 DB_USER=your_cpanel_username_dbuser
 DB_PASSWORD=your_database_password
-DB_NAME=your_cpanel_username_qorder
+DB_NAME=your_cpanel_username_efix
 JWT_SECRET=generate_random_string_here
 CORS_ORIGIN=https://yourdomain.com
 ```
@@ -50,7 +50,7 @@ CORS_ORIGIN=https://yourdomain.com
 ### 5. Setup Node.js App
 1. **cPanel → Node.js Apps**
 2. **Create Application**:
-   - Root: `qorder/backend`
+   - Root: `efix-solution/backend`
    - Startup: `server.js`
    - Mode: Production
 

@@ -1,4 +1,4 @@
-# QOrder - Comprehensive Point of Sale (POS) System
+# efix solution - Comprehensive Point of Sale (POS) System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
@@ -111,8 +111,8 @@ A modern, full-featured Point of Sale system built with React and Node.js, desig
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/qorder-pos-system.git
-cd qorder-pos-system
+git clone https://github.com/YOUR_USERNAME/efix-solution-pos-system.git
+cd efix-solution-pos-system
 ```
 
 ### 2. Backend Setup
@@ -200,7 +200,7 @@ npm run build
 ## 📁 Project Structure
 
 ```
-qorder-pos-system/
+efix-solution-pos-system/
 ├── backend/
 │   ├── database/
 │   │   └── db.js              # Database connection and schema
@@ -329,7 +329,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you encounter any issues or have questions:
 
-1. Check the [Issues](https://github.com/YOUR_USERNAME/qorder-pos-system/issues) page
+1. Check the [Issues](https://github.com/YOUR_USERNAME/efix-solution-pos-system/issues) page
 2. Create a new issue with detailed description
 3. Join our community discussions
 

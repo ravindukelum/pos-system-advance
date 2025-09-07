@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# QOrder POS System - cPanel Deployment Script
+# efix solution POS System - cPanel Deployment Script
 # This script automates the deployment process for cPanel hosting
 
-echo "🚀 Starting QOrder POS System Deployment..."
+echo "🚀 Starting efix solution POS System Deployment..."
 
 # Colors for output
 RED='\033[0;31m'
