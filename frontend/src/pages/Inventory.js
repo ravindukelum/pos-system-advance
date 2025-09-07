@@ -9,9 +9,11 @@ import {
   ArrowDownIcon,
   XMarkIcon,
   CheckIcon,
-  EyeIcon
+  EyeIcon,
+  QrCodeIcon
 } from '@heroicons/react/24/outline';
-import { inventoryAPI } from '../services/api';
+import { inventoryAPI, barcodesAPI } from '../services/api';
+import AdvancedBarcodeScanner from '../components/AdvancedBarcodeScanner';
 
 const Inventory = () => {
   const [inventory, setInventory] = useState([]);
@@ -27,6 +29,8 @@ const Inventory = () => {
   const [sortOrder, setSortOrder] = useState('asc');
   const [selectedItems, setSelectedItems] = useState([]);
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [showSearchBarcodeScanner, setShowSearchBarcodeScanner] = useState(false);
   
   const [formData, setFormData] = useState({
     item_name: '',
@@ -246,6 +250,39 @@ const Inventory = () => {
       <ArrowDownIcon className="h-4 w-4 inline ml-1" />;
   };
 
+  const handleBarcodeSearch = async (barcode) => {
+    try {
+      // First try to lookup the barcode in the backend
+      const response = await barcodesAPI.lookup(barcode);
+      const item = response.data.item;
+      
+      if (item) {
+        // Product found - set search term to highlight it
+        setSearchTerm(item.barcode);
+        setShowSearchBarcodeScanner(false);
+        alert(`Product found: ${item.name}`);
+      } else {
+        // Product not found - redirect to add product screen
+        setShowSearchBarcodeScanner(false);
+        setFormData({
+          ...formData,
+          barcode: barcode
+        });
+        setShowModal(true);
+        alert('Product not found. Opening add product form with scanned barcode.');
+      }
+    } catch (error) {
+      // If lookup fails, assume product doesn't exist
+      setShowSearchBarcodeScanner(false);
+      setFormData({
+        ...formData,
+        barcode: barcode
+      });
+      setShowModal(true);
+      alert('Product not found. Opening add product form with scanned barcode.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -270,6 +307,23 @@ const Inventory = () => {
               <span className="sm:hidden">Delete ({selectedItems.length})</span>
             </button>
           )}
+
+      {/* Barcode Scanner Modal */}
+       <AdvancedBarcodeScanner
+         isOpen={showBarcodeScanner}
+         onScan={(code) => {
+           setFormData({...formData, barcode: code});
+           setShowBarcodeScanner(false);
+         }}
+         onClose={() => setShowBarcodeScanner(false)}
+       />
+
+      {/* Search Barcode Scanner Modal */}
+       <AdvancedBarcodeScanner
+         isOpen={showSearchBarcodeScanner}
+         onScan={handleBarcodeSearch}
+         onClose={() => setShowSearchBarcodeScanner(false)}
+       />
           <button
             onClick={() => setShowModal(true)}
             className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 transition-colors"
@@ -353,15 +407,26 @@ const Inventory = () => {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search by name, SKU, category, or supplier..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-          />
+        <div className="relative flex-1 flex gap-2">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search by name, SKU, category, supplier, or scan barcode..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSearchBarcodeScanner(true)}
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors"
+            title="Scan Barcode to Search"
+          >
+            <QrCodeIcon className="h-5 w-5" />
+            Scan
+          </button>
         </div>
         
         <select
@@ -738,12 +803,24 @@ const Inventory = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Barcode
                   </label>
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) => setFormData({...formData, barcode: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={formData.barcode}
+                      onChange={(e) => setFormData({...formData, barcode: e.target.value})}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder="Enter barcode or scan using camera"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBarcodeScanner(true)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1"
+                      title="Scan Barcode"
+                    >
+                      <QrCodeIcon className="h-5 w-5" />
+                      Scan
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="sm:col-span-2">

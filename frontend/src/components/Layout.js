@@ -18,16 +18,16 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'Partners', href: '/partners', icon: UsersIcon },
-  { name: 'Investments', href: '/investments', icon: CurrencyDollarIcon },
-  { name: 'Inventory', href: '/inventory', icon: CubeIcon },
-  { name: 'Sales', href: '/sales', icon: ShoppingCartIcon },
-  { name: 'Customers', href: '/customers', icon: UsersIcon },
-  { name: 'Employees', href: '/employees', icon: UsersIcon },
-  { name: 'Payments', href: '/payments', icon: CurrencyDollarIcon },
-  { name: 'Reports', href: '/reports', icon: CogIcon },
-  { name: 'Settings', href: '/settings', icon: CogIcon },
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['admin', 'manager', 'cashier', 'employee'] },
+  { name: 'Partners', href: '/partners', icon: UsersIcon, roles: ['admin', 'manager'] },
+  { name: 'Investments', href: '/investments', icon: CurrencyDollarIcon, roles: ['admin', 'manager'] },
+  { name: 'Inventory', href: '/inventory', icon: CubeIcon, roles: ['admin', 'manager'] },
+  { name: 'Sales', href: '/sales', icon: ShoppingCartIcon, roles: ['admin', 'manager', 'cashier'] },
+  { name: 'Customers', href: '/customers', icon: UsersIcon, roles: ['admin', 'manager', 'cashier'] },
+  { name: 'Users', href: '/users', icon: UsersIcon, roles: ['admin'] },
+  { name: 'Payments', href: '/payments', icon: CurrencyDollarIcon, roles: ['admin', 'manager', 'cashier'] },
+  { name: 'Reports', href: '/reports', icon: CogIcon, roles: ['admin', 'manager'] },
+  { name: 'Settings', href: '/settings', icon: CogIcon, roles: ['admin', 'manager'] },
 ];
 
 function classNames(...classes) {
@@ -39,6 +39,11 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { isDarkMode, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+
+  // Filter navigation items based on user role
+  const filteredNavigation = navigation.filter(item => 
+    item.roles.includes(user?.role)
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -66,7 +71,7 @@ export default function Layout({ children }) {
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">POS System</h1>
             </div>
             <nav className="mt-5 px-2 space-y-1">
-              {navigation.map((item) => {
+              {filteredNavigation.map((item) => {
                 const isActive = location.pathname === item.href || 
                   (item.href === '/dashboard' && location.pathname === '/');
                 return (
@@ -90,7 +95,7 @@ export default function Layout({ children }) {
                     {item.name}
                   </Link>
                 );
-              })}}}
+              })}
             </nav>
           </div>
         </div>
@@ -105,7 +110,7 @@ export default function Layout({ children }) {
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">POS System</h1>
               </div>
               <nav className="mt-5 flex-1 px-2 bg-white dark:bg-gray-800 space-y-1">
-                {navigation.map((item) => {
+                {filteredNavigation.map((item) => {
                   const isActive = location.pathname === item.href || 
                     (item.href === '/dashboard' && location.pathname === '/');
                   return (
@@ -128,7 +133,7 @@ export default function Layout({ children }) {
                       {item.name}
                     </Link>
                   );
-                })}}}
+                })}
               </nav>
             </div>
           </div>

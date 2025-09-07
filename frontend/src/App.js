@@ -12,7 +12,7 @@ import Investments from './pages/Investments';
 import Inventory from './pages/Inventory';
 import Sales from './pages/Sales';
 import Customers from './pages/Customers';
-import Employees from './pages/Employees';
+import Users from './pages/Users';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
@@ -38,63 +38,63 @@ function App() {
                 </ProtectedRoute>
               } />
               <Route path="/partners" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin', 'manager']}>
                   <Layout>
                     <Partners />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/investments" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin', 'manager']}>
                   <Layout>
                     <Investments />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/inventory" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin', 'manager']}>
                   <Layout>
                     <Inventory />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/sales" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin', 'manager', 'cashier']}>
                   <Layout>
                     <Sales />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/customers" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin', 'manager', 'cashier']}>
                   <Layout>
                     <Customers />
                   </Layout>
                 </ProtectedRoute>
               } />
-              <Route path="/employees" element={
-                <ProtectedRoute roles={['admin', 'manager']}>
+              <Route path="/users" element={
+                <ProtectedRoute roles={['admin']}>
                   <Layout>
-                    <Employees />
+                    <Users />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/reports" element={
-                <ProtectedRoute permissions={['reports.view']}>
+                <ProtectedRoute roles={['admin', 'manager']}>
                   <Layout>
                     <Reports />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/payments" element={
-                <ProtectedRoute permissions={['payments.view']}>
+                <ProtectedRoute roles={['admin', 'manager', 'cashier']}>
                   <Layout>
                     <Payments />
                   </Layout>
                 </ProtectedRoute>
               } />
               <Route path="/settings" element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin', 'manager']}>
                   <Layout>
                     <Settings />
                   </Layout>

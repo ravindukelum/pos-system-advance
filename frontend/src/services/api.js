@@ -208,31 +208,20 @@ export const reportsAPI = {
   },
 };
 
-// Employees API
-export const employeesAPI = {
-  getAll: () => api.get('/employees'),
-  getById: (id) => api.get(`/employees/${id}`),
-  create: (data) => api.post('/employees', data),
-  update: (id, data) => api.put(`/employees/${id}`, data),
-  delete: (id) => api.delete(`/employees/${id}`),
-  clockIn: (id) => api.post(`/employees/${id}/clock-in`),
-  clockOut: (id) => api.post(`/employees/${id}/clock-out`),
-  getTimeTracking: (id, params = {}) => {
+// Users API
+export const usersAPI = {
+  getAll: (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
-    return api.get(`/employees/${id}/time-tracking?${queryString}`);
+    return api.get(`/users?${queryString}`);
   },
-  getPerformance: (id, params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/employees/${id}/performance?${queryString}`);
-  },
-  getAttendance: (id, params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/employees/${id}/attendance?${queryString}`);
-  },
-  getAttendanceSummary: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/employees/attendance-summary?${queryString}`);
-  },
+  getById: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
+  lock: (id, reason) => api.post(`/users/${id}/lock`, { reason }),
+  unlock: (id) => api.post(`/users/${id}/unlock`),
+  resetPassword: (id, password) => api.post(`/users/${id}/reset-password`, { new_password: password }),
+  getStats: () => api.get('/users/stats/overview'),
 };
 
 export default api;

@@ -23,6 +23,7 @@ const Settings = () => {
     shopLogoUrl: '',
     taxRate: '',
     currency: 'USD',
+    countryCode: '+94',
     warrantyPeriod: '30',
     warrantyTerms: 'Standard warranty terms apply. Items must be returned in original condition.',
     receiptFooter: 'Thank you for your business!',
@@ -276,7 +277,7 @@ const Settings = () => {
             <h2 className="text-xl font-semibold text-gray-900">Financial Settings</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Currency
@@ -292,6 +293,29 @@ const Settings = () => {
                     {option.label}
                   </option>
                 ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Country Code
+              </label>
+              <select
+                name="countryCode"
+                value={settings.countryCode}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="+94">+94 (Sri Lanka)</option>
+                <option value="+1">+1 (USA/Canada)</option>
+                <option value="+44">+44 (UK)</option>
+                <option value="+91">+91 (India)</option>
+                <option value="+61">+61 (Australia)</option>
+                <option value="+86">+86 (China)</option>
+                <option value="+81">+81 (Japan)</option>
+                <option value="+49">+49 (Germany)</option>
+                <option value="+33">+33 (France)</option>
+                <option value="+39">+39 (Italy)</option>
               </select>
             </div>
             

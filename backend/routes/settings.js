@@ -1,88 +1,32 @@
 const express = require('express');
 const router = express.Router();
-const mysql = require('mysql2/promise');
+const Database = require('../database/db');
 
-// Database configuration
-const dbConfig = {
-  host: 'localhost',
-  user: 'root',
-  password: 'root',
-  port: 3306,
-  database: 'pos_system'
+require('dotenv').config();
+
+// Create database instance
+const dbInstance = new Database();
+let db;
+
+// Initialize database connection
+dbInstance.initialize().then(() => {
+  db = dbInstance.getDb();
+}).catch(err => {
+  console.error('Failed to initialize database in settings route:', err);
+});
+
+// Note: Settings table is now initialized in the main database initialization file (db.js)
+
+// Helper function to execute queries
+const executeQuery = async (sql, params = []) => {
+  return await dbInstance.executeQuery(sql, params);
 };
-
-// Initialize settings table if it doesn't exist
-const initializeSettingsTable = async () => {
-  let connection;
-  try {
-    connection = await mysql.createConnection(dbConfig);
-    
-    // Create settings table if it doesn't exist
-    await connection.execute(`CREATE TABLE IF NOT EXISTS settings (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      shopName VARCHAR(255) DEFAULT '',
-      shopPhone VARCHAR(50) DEFAULT '',
-      shopEmail VARCHAR(255) DEFAULT '',
-      shopAddress TEXT,
-      shopCity VARCHAR(100) DEFAULT '',
-      shopState VARCHAR(100) DEFAULT '',
-      shopZipCode VARCHAR(20) DEFAULT '',
-      shopLogoUrl VARCHAR(500) DEFAULT '',
-      taxRate DECIMAL(5,2) DEFAULT 0,
-      currency VARCHAR(10) DEFAULT 'USD',
-      warrantyPeriod INT DEFAULT 30,
-      warrantyTerms TEXT,
-      receiptFooter TEXT,
-      businessRegistration VARCHAR(255) DEFAULT '',
-      taxId VARCHAR(255) DEFAULT '',
-      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )`);
-
-    // Add shopLogoUrl column if it doesn't exist (for existing tables)
-    try {
-      await connection.execute(`ALTER TABLE settings ADD COLUMN shopLogoUrl VARCHAR(500) DEFAULT '' AFTER shopZipCode`);
-      console.log('shopLogoUrl column added successfully');
-    } catch (error) {
-      // Column might already exist, ignore the error
-      if (error.code !== 'ER_DUP_FIELDNAME') {
-        console.error('Error adding shopLogoUrl column:', error);
-      }
-    }
-
-    // Check if settings exist, if not insert default
-    const [rows] = await connection.execute('SELECT COUNT(*) as count FROM settings');
-    
-    if (rows[0].count === 0) {
-      await connection.execute(`INSERT INTO settings (
-        shopName, shopPhone, shopEmail, shopAddress, shopCity, shopState, shopZipCode, shopLogoUrl,
-        taxRate, currency, warrantyPeriod, warrantyTerms, receiptFooter,
-        businessRegistration, taxId
-      ) VALUES (
-        'My POS Shop', '', '', '', '', '', '', '',
-        0, 'USD', 30, 'Standard warranty terms apply. Items must be returned in original condition.',
-        'Thank you for your business!', '', ''
-      )`);
-      console.log('Default settings created successfully');
-    }
-  } catch (error) {
-    console.error('Error initializing settings table:', error);
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
-  }
-};
-
-// Initialize table when module loads (with delay to ensure database is ready)
-setTimeout(initializeSettingsTable, 3000);
 
 // GET /api/settings - Get current settings
 router.get('/', async (req, res) => {
-  let connection;
   try {
-    connection = await mysql.createConnection(dbConfig);
-    const [rows] = await connection.execute('SELECT * FROM settings ORDER BY id DESC LIMIT 1');
+    const result = await executeQuery('SELECT * FROM settings ORDER BY id DESC LIMIT 1');
+    const rows = result.rows || result;
     
     if (rows.length === 0) {
       // Return default settings if none exist
@@ -97,29 +41,25 @@ router.get('/', async (req, res) => {
         shopLogoUrl: '',
         taxRate: 0,
         currency: 'USD',
+        countryCode: '+94',
         warrantyPeriod: 30,
         warrantyTerms: 'Standard warranty terms apply. Items must be returned in original condition.',
         receiptFooter: 'Thank you for your business!',
         businessRegistration: '',
         taxId: ''
       };
-      return res.json(defaultSettings);
+      return res.json({ settings: defaultSettings });
     }
     
-    res.json(rows[0]);
+    res.json({ settings: rows[0] });
   } catch (error) {
     console.error('Error fetching settings:', error);
     res.status(500).json({ error: 'Failed to fetch settings' });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 });
 
 // PUT /api/settings - Update settings
 router.put('/', async (req, res) => {
-  let connection;
   try {
     const {
       shopName,
@@ -132,6 +72,7 @@ router.put('/', async (req, res) => {
       shopLogoUrl,
       taxRate,
       currency,
+      countryCode,
       warrantyPeriod,
       warrantyTerms,
       receiptFooter,
@@ -152,53 +93,50 @@ router.put('/', async (req, res) => {
       return res.status(400).json({ error: 'Warranty period cannot be negative' });
     }
 
-    connection = await mysql.createConnection(dbConfig);
-    
     // Check if settings exist
-    const [existingRows] = await connection.execute('SELECT id FROM settings ORDER BY id DESC LIMIT 1');
+    const existingResult = await executeQuery('SELECT id FROM settings ORDER BY id DESC LIMIT 1');
+    const existingRows = existingResult.rows || existingResult;
 
     if (existingRows.length > 0) {
       // Update existing settings
       const updateQuery = `UPDATE settings SET 
         shopName = ?, shopPhone = ?, shopEmail = ?, shopAddress = ?, shopCity = ?, 
-        shopState = ?, shopZipCode = ?, shopLogoUrl = ?, taxRate = ?, currency = ?, warrantyPeriod = ?,
+        shopState = ?, shopZipCode = ?, shopLogoUrl = ?, taxRate = ?, currency = ?, countryCode = ?, warrantyPeriod = ?,
         warrantyTerms = ?, receiptFooter = ?, businessRegistration = ?, taxId = ?
         WHERE id = ?`;
       
-      await connection.execute(updateQuery, [
+      await executeQuery(updateQuery, [
         shopName, shopPhone, shopEmail, shopAddress, shopCity, shopState, shopZipCode, shopLogoUrl,
-        taxRate, currency, warrantyPeriod, warrantyTerms, receiptFooter,
+        taxRate, currency, countryCode, warrantyPeriod, warrantyTerms, receiptFooter,
         businessRegistration, taxId, existingRows[0].id
       ]);
       
       // Fetch and return updated settings
-      const [updatedRows] = await connection.execute('SELECT * FROM settings WHERE id = ?', [existingRows[0].id]);
+      const updatedResult = await executeQuery('SELECT * FROM settings WHERE id = ?', [existingRows[0].id]);
+      const updatedRows = updatedResult.rows || updatedResult;
       res.json(updatedRows[0]);
     } else {
       // Insert new settings
       const insertQuery = `INSERT INTO settings (
         shopName, shopPhone, shopEmail, shopAddress, shopCity, shopState, shopZipCode, shopLogoUrl,
-        taxRate, currency, warrantyPeriod, warrantyTerms, receiptFooter,
+        taxRate, currency, countryCode, warrantyPeriod, warrantyTerms, receiptFooter,
         businessRegistration, taxId
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
       
-      const [result] = await connection.execute(insertQuery, [
+      const insertResult = await executeQuery(insertQuery, [
         shopName, shopPhone, shopEmail, shopAddress, shopCity, shopState, shopZipCode, shopLogoUrl,
-        taxRate, currency, warrantyPeriod, warrantyTerms, receiptFooter,
+        taxRate, currency, countryCode, warrantyPeriod, warrantyTerms, receiptFooter,
         businessRegistration, taxId
       ]);
       
       // Fetch and return new settings
-      const [newRows] = await connection.execute('SELECT * FROM settings WHERE id = ?', [result.insertId]);
+      const newResult = await executeQuery('SELECT * FROM settings WHERE id = ?', [insertResult.insertId]);
+      const newRows = newResult.rows || newResult;
       res.json(newRows[0]);
     }
   } catch (error) {
     console.error('Error saving settings:', error);
     res.status(500).json({ error: 'Failed to save settings' });
-  } finally {
-    if (connection) {
-      await connection.end();
-    }
   }
 });
 

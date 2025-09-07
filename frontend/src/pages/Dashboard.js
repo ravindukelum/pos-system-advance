@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { dashboardAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import {
   UsersIcon,
   CurrencyDollarIcon,
@@ -14,15 +16,28 @@ import toast from 'react-hot-toast';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
   const [topItems, setTopItems] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Redirect cashiers to Sales page
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (user?.role === 'cashier') {
+      navigate('/sales', { replace: true });
+      return;
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
+    // Don't fetch dashboard data for cashiers since they'll be redirected
+    if (user?.role !== 'cashier') {
+      fetchDashboardData();
+    }
+  }, [user]);
 
   const fetchDashboardData = async () => {
     try {

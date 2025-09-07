@@ -1,0 +1,34 @@
+{
+  "name": "qorder-pos-system",
+  "version": "1.0.0",
+  "description": "QOrder POS System - Complete Point of Sale Solution",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm start\"",
+    "build": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm install --production",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "build:all": "npm run build:backend && npm run build:frontend",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "deploy:cpanel": "npm run build:all && echo 'Build completed. Ready for cPanel deployment.'"
+  },
+  "keywords": [
+    "pos",
+    "point-of-sale",
+    "inventory",
+    "sales",
+    "react",
+    "nodejs",
+    "mysql"
+  ],
+  "author": "QOrder Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  }
+}

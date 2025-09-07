@@ -39,7 +39,7 @@ const authLimiter = rateLimit({
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 login attempts per windowMs
+  max: 100, // limit each IP to 100 login attempts per windowMs (increased for development)
   message: { error: 'Too many login attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -174,7 +174,7 @@ router.post('/login', loginLimiter, validateLogin, async (req, res) => {
         email: user.email,
         full_name: user.full_name,
         role: user.role,
-        permissions: user.permissions ? JSON.parse(user.permissions) : {}
+        permissions: user.permissions ? (typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions) : {}
       },
       accessToken,
       refreshToken
@@ -225,7 +225,7 @@ router.post('/refresh', async (req, res) => {
         email: user.email,
         full_name: user.full_name,
         role: user.role,
-        permissions: user.permissions ? JSON.parse(user.permissions) : {}
+        permissions: user.permissions ? (typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions) : {}
       }
     });
 
@@ -263,7 +263,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         email: req.user.email,
         full_name: req.user.full_name,
         role: req.user.role,
-        permissions: req.user.permissions ? JSON.parse(req.user.permissions) : {}
+        permissions: req.user.permissions ? (typeof req.user.permissions === 'string' ? JSON.parse(req.user.permissions) : req.user.permissions) : {}
       }
     });
   } catch (error) {

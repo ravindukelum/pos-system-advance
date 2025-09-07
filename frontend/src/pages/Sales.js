@@ -7,14 +7,20 @@ import {
   PrinterIcon,
   XMarkIcon,
   MinusIcon,
-  CurrencyDollarIcon
+  CurrencyDollarIcon,
+  ChatBubbleLeftRightIcon,
+  QrCodeIcon
 } from '@heroicons/react/24/outline';
-import { salesAPI, inventoryAPI, settingsAPI } from '../services/api';
+import { salesAPI, inventoryAPI, settingsAPI, customersAPI } from '../services/api';
 import PrintInvoice from '../components/PrintInvoice';
+import html2pdf from 'html2pdf.js';
+import AdvancedBarcodeScanner from '../components/AdvancedBarcodeScanner';
 
 const Sales = () => {
   const [sales, setSales] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [settings, setSettings] = useState({ countryCode: '+94' });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -30,6 +36,8 @@ const Sales = () => {
     name: '',
     phone: ''
   });
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [invoiceSettings, setInvoiceSettings] = useState({
     taxRate: 0,
     discountAmount: 0,
@@ -38,10 +46,13 @@ const Sales = () => {
   
   // Payment modal state
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
   useEffect(() => {
     fetchSales();
     fetchInventory();
+    fetchCustomers();
+    fetchSettings();
   }, []);
 
   const fetchSales = async () => {
@@ -62,6 +73,233 @@ const Sales = () => {
     } catch (error) {
       console.error('Error fetching inventory:', error);
     }
+  };
+
+  const fetchCustomers = async () => {
+    try {
+      const response = await customersAPI.getAll();
+      setCustomers(response.data.customers || []);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const response = await settingsAPI.getSettings();
+      setSettings(response.data.settings || { countryCode: '+94' });
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  const getCurrencySymbol = (currencyCode) => {
+    const currencyMap = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'CAD': 'C$',
+      'AUD': 'A$',
+      'LKR': '₨'
+    };
+    return currencyMap[currencyCode] || currencyCode;
+  };
+
+  // Function to generate invoice PDF
+  const generateInvoicePDF = async (sale) => {
+    try {
+      // Fetch settings and sale details
+      const settingsResponse = await settingsAPI.getSettings();
+      const saleResponse = await salesAPI.getById(sale.id);
+      const settings = settingsResponse.data;
+      const saleDetails = saleResponse.data.sale;
+      
+      // Calculate totals
+      const subtotal = saleDetails.items?.reduce((sum, item) => sum + parseFloat(item.line_total), 0) || 0;
+      const tax = parseFloat(saleDetails.tax_amount || 0);
+      const discount = parseFloat(sale.discount_amount || 0);
+      const total = parseFloat(sale.total_amount);
+      const paid = parseFloat(sale.paid_amount || 0);
+      const balance = total - paid;
+      
+      // Generate invoice HTML
+      const invoiceHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Invoice - ${sale.invoice}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; color: #000; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .company-name { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+            .invoice-details { margin-bottom: 20px; }
+            .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            .items-table th, .items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            .items-table th { background-color: #f5f5f5; font-weight: bold; }
+            .totals { margin-top: 20px; }
+            .total-row { display: flex; justify-content: space-between; margin: 5px 0; }
+            .total-row.final { font-weight: bold; font-size: 18px; border-top: 2px solid #000; padding-top: 10px; }
+            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">${settings?.shopName || 'SMALL POS SYSTEM'}</div>
+            ${settings?.shopPhone ? `<div>Phone: ${settings.shopPhone}</div>` : ''}
+            ${settings?.shopEmail ? `<div>Email: ${settings.shopEmail}</div>` : ''}
+            ${settings?.shopAddress ? `<div>${settings.shopAddress}</div>` : ''}
+          </div>
+          
+          <div class="invoice-details">
+            <div><strong>Invoice:</strong> ${sale.invoice}</div>
+            <div><strong>Date:</strong> ${new Date(sale.date).toLocaleDateString()}</div>
+            <div><strong>Customer:</strong> ${sale.customer_name || 'Walk-in Customer'}</div>
+            ${sale.customer_phone ? `<div><strong>Phone:</strong> ${sale.customer_phone}</div>` : ''}
+          </div>
+          
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(saleDetails?.items || []).map(item => `
+                <tr>
+                  <td>${item.item_name}</td>
+                  <td>${item.quantity}</td>
+                  <td>${getCurrencySymbol(settings?.currency || 'LKR')} ${parseFloat(item.unit_price).toFixed(2)}</td>
+                  <td>${getCurrencySymbol(settings?.currency || 'LKR')} ${parseFloat(item.line_total).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="totals">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span>${getCurrencySymbol(settings?.currency || 'LKR')} ${subtotal.toFixed(2)}</span>
+            </div>
+            ${tax > 0 ? `
+              <div class="total-row">
+                <span>Tax:</span>
+                <span>${getCurrencySymbol(settings?.currency || 'LKR')} ${tax.toFixed(2)}</span>
+              </div>
+            ` : ''}
+            ${discount > 0 ? `
+              <div class="total-row">
+                <span>Discount:</span>
+                <span>-${getCurrencySymbol(settings?.currency || 'LKR')} ${discount.toFixed(2)}</span>
+              </div>
+            ` : ''}
+            <div class="total-row final">
+              <span>Total:</span>
+              <span>${getCurrencySymbol(settings?.currency || 'LKR')} ${total.toFixed(2)}</span>
+            </div>
+            <div class="total-row">
+              <span>Paid:</span>
+              <span>${getCurrencySymbol(settings?.currency || 'LKR')} ${paid.toFixed(2)}</span>
+            </div>
+            <div class="total-row">
+              <span>Balance:</span>
+              <span>${getCurrencySymbol(settings?.currency || 'LKR')} ${balance.toFixed(2)}</span>
+            </div>
+          </div>
+          
+          <div class="footer">
+            <p>${settings?.receiptFooter || 'Thank you for your business!'}</p>
+            <p>Status: ${sale.status.toUpperCase()}</p>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Create a temporary element to hold the HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = invoiceHTML;
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.left = '-9999px';
+      document.body.appendChild(tempDiv);
+      
+      // Configure PDF options
+      const options = {
+        margin: 0.5,
+        filename: `invoice-${sale.invoice}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+      };
+      
+      // Generate PDF
+      const pdf = await html2pdf().set(options).from(tempDiv).outputPdf('blob');
+      
+      // Clean up
+      document.body.removeChild(tempDiv);
+      
+      return pdf;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      throw error;
+    }
+  };
+
+  const sendWhatsApp = (sale) => {
+    if (!sale.customer_phone) {
+      alert('No phone number available for this customer');
+      return;
+    }
+
+    const phone = sale.customer_phone.startsWith('+') 
+      ? sale.customer_phone.substring(1) 
+      : settings.countryCode.substring(1) + sale.customer_phone;
+    
+    const currencySymbol = getCurrencySymbol(settings.currency || 'LKR');
+    
+    // Parse sale items for detailed breakdown
+    let itemsText = '';
+    try {
+      const items = JSON.parse(sale.items || '[]');
+      itemsText = items.map((item, index) => 
+        `${index + 1}. ${item.name}\n   Qty: ${item.quantity} × ${currencySymbol}${item.price} = ${currencySymbol}${(item.quantity * item.price).toFixed(2)}`
+      ).join('\n\n');
+    } catch (error) {
+      itemsText = 'Items details not available';
+    }
+    
+    const message = `🧾 *${settings?.shopName || 'Your Shop'}*\n` +
+      `*PAYMENT RECEIPT*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `📋 *Invoice Details:*\n` +
+      `• Invoice #: ${sale.invoice}\n` +
+      `• Date: ${new Date(sale.created_at).toLocaleDateString()}\n` +
+      `• Payment Method: ${sale.payment_method || 'Cash'}\n\n` +
+      `👤 *Customer Information:*\n` +
+      `• Name: ${sale.customer_name || 'Customer'}\n` +
+      `• Phone: ${sale.customer_phone || 'N/A'}\n\n` +
+      `📦 *Items Purchased:*\n${itemsText}\n\n` +
+      `💰 *Payment Summary:*\n` +
+      `• Subtotal: ${currencySymbol}${sale.subtotal || sale.total_amount}\n` +
+      `• Tax: ${currencySymbol}${sale.tax || '0.00'}\n` +
+      `• Discount: ${currencySymbol}${sale.discount || '0.00'}\n` +
+      `• *Total Amount: ${currencySymbol}${sale.total_amount}*\n` +
+      `• Paid: ${currencySymbol}${sale.paid_amount}\n` +
+      `• Balance: ${currencySymbol}${(sale.total_amount - sale.paid_amount).toFixed(2)}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🏪 *Store Information:*\n` +
+      `• Location: ${sale.location || 'Main Store'}\n` +
+      `• Support: ${settings?.phone || 'Contact us for support'}\n\n` +
+      `🔄 *Warranty: ${settings?.warrantyPeriod || 30} days on all items*\n\n` +
+      `Thank you for choosing *${settings?.shopName || 'Your Shop'}*! 🙏\n` +
+      `We appreciate your business and look forward to serving you again.\n\n` +
+      `_This is an automated receipt. Please save for your records._`;
+    
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   const addToCart = (item) => {
@@ -90,6 +328,79 @@ const Sales = () => {
       } else {
         alert('Item is out of stock');
       }
+    }
+  };
+
+  const handleBarcodeDetected = (barcode) => {
+    const item = inventory.find(item => item.barcode === barcode);
+    if (item) {
+      addToCart(item);
+      setShowBarcodeScanner(false);
+      alert(`Added ${item.item_name} to cart`);
+    } else {
+      alert('Product not found with this barcode');
+    }
+  };
+
+  // Customer search and autocomplete functions
+  const searchCustomers = (searchTerm) => {
+    if (!searchTerm.trim()) {
+      setCustomerSuggestions([]);
+      setShowCustomerDropdown(false);
+      return;
+    }
+
+    const filtered = customers.filter(customer => 
+      customer.phone?.includes(searchTerm) ||
+      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    setCustomerSuggestions(filtered.slice(0, 5)); // Show max 5 suggestions
+    setShowCustomerDropdown(filtered.length > 0);
+  };
+
+  const selectCustomer = (customer) => {
+    setCustomerInfo({
+      name: customer.name,
+      phone: customer.phone
+    });
+    setShowCustomerDropdown(false);
+    setCustomerSuggestions([]);
+  };
+
+  const handleCustomerNameChange = (e) => {
+    const value = e.target.value;
+    setCustomerInfo({...customerInfo, name: value});
+    searchCustomers(value);
+  };
+
+  const autoAddCustomer = async (customerData) => {
+    try {
+      // Check if customer already exists by phone
+      if (!customerData.phone || !customerData.phone.trim()) {
+        return; // Phone is required
+      }
+      
+      const existingCustomer = customers.find(c => 
+        c.phone === customerData.phone.trim()
+      );
+      
+      if (!existingCustomer) {
+        const newCustomer = {
+          name: customerData.name.trim() || 'Customer',
+          phone: customerData.phone.trim(),
+          address: '',
+          discount_percentage: 0,
+          notes: 'Auto-added from sales'
+        };
+        
+        await customersAPI.create(newCustomer);
+        await fetchCustomers(); // Refresh customer list
+        console.log('Customer auto-added:', newCustomer.phone);
+      }
+    } catch (error) {
+      console.error('Error auto-adding customer:', error);
     }
   };
 
@@ -138,12 +449,20 @@ const Sales = () => {
       return;
     }
 
+    if (!customerInfo.phone || !customerInfo.phone.trim()) {
+      alert('Phone number is required for creating a sale');
+      return;
+    }
+
     try {
+      // Auto-add customer if phone is provided
+      await autoAddCustomer(customerInfo);
+      
       const totals = calculateTotals();
       const saleData = {
         items: currentCart,
-        customer_name: customerInfo.name,
-        customer_phone: customerInfo.phone,
+        customer_name: customerInfo.name || 'Customer',
+        customer_phone: customerInfo.phone.trim(),
         tax_rate: invoiceSettings.taxRate,
         discount_amount: invoiceSettings.discountAmount,
         paid_amount: invoiceSettings.paidAmount
@@ -334,9 +653,18 @@ const Sales = () => {
                        >
                          <PrinterIcon className="h-5 w-5" />
                        </button>
+                       {sale.customer_phone && (
+                         <button
+                           onClick={() => sendWhatsApp(sale)}
+                           className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                           title="Send via WhatsApp"
+                         >
+                           <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                         </button>
+                       )}
                        <button
                          onClick={() => openPaymentModal(sale)}
-                         className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                         className="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300"
                          title="Update Payment"
                        >
                          <CurrencyDollarIcon className="h-5 w-5" />
@@ -425,9 +753,18 @@ const Sales = () => {
                 >
                   <PrinterIcon className="h-5 w-5" />
                 </button>
+                {sale.customer_phone && (
+                  <button
+                    onClick={() => sendWhatsApp(sale)}
+                    className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                    title="Send via WhatsApp"
+                  >
+                    <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                  </button>
+                )}
                 <button
                   onClick={() => openPaymentModal(sale)}
-                  className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                  className="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 dark:text-orange-400 dark:hover:text-orange-300 dark:hover:bg-orange-900/20 rounded-lg transition-colors"
                   title="Update Payment"
                 >
                   <CurrencyDollarIcon className="h-5 w-5" />
@@ -466,15 +803,24 @@ const Sales = () => {
                 <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Available Items</h3>
                 
                 {/* Item Search */}
-                <div className="relative mb-4">
-                  <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder="Search items..."
-                    value={itemSearchTerm}
-                    onChange={(e) => setItemSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                  />
+                <div className="mb-4 space-y-2">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="Search items..."
+                      value={itemSearchTerm}
+                      onChange={(e) => setItemSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowBarcodeScanner(true)}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                  >
+                    <QrCodeIcon className="h-5 w-5" />
+                    Scan Barcode to Add Item
+                  </button>
                 </div>
 
                 {/* Items List */}
@@ -512,18 +858,48 @@ const Sales = () => {
                 <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <h4 className="font-medium mb-2 text-gray-900 dark:text-white">Customer Information</h4>
                   <div className="grid grid-cols-1 gap-2">
+                    {/* Phone Number with Autocomplete */}
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        placeholder="Phone Number (Required) - Start typing to search"
+                        value={customerInfo.phone}
+                        onChange={(e) => {
+                          const phone = e.target.value;
+                          setCustomerInfo({...customerInfo, phone});
+                          searchCustomers(phone);
+                        }}
+                        onFocus={() => customerInfo.phone && searchCustomers(customerInfo.phone)}
+                        onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        required
+                      />
+                      
+                      {/* Autocomplete Dropdown */}
+                      {showCustomerDropdown && customerSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {customerSuggestions.map((customer) => (
+                            <div
+                              key={customer.id}
+                              onClick={() => selectCustomer(customer)}
+                              className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-200 dark:border-gray-600 last:border-b-0"
+                            >
+                              <div className="font-medium text-gray-900 dark:text-white">{customer.name}</div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">{customer.phone}</div>
+                              {customer.email && (
+                                <div className="text-xs text-gray-400 dark:text-gray-500">{customer.email}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
                     <input
                       type="text"
                       placeholder="Customer Name (Optional)"
                       value={customerInfo.name}
                       onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})}
-                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Phone Number (Optional)"
-                      value={customerInfo.phone}
-                      onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})}
                       className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                     />
                   </div>
@@ -756,6 +1132,13 @@ const Sales = () => {
           onClose={() => setShowPrintModal(false)} 
         />
       )}
+
+      {/* Barcode Scanner Modal */}
+       <AdvancedBarcodeScanner
+         isOpen={showBarcodeScanner}
+         onScan={handleBarcodeDetected}
+         onClose={() => setShowBarcodeScanner(false)}
+       />
     </div>
   );
 };

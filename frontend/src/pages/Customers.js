@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { customersAPI } from '../services/api';
+import { customersAPI, settingsAPI } from '../services/api';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -19,12 +19,12 @@ const Customers = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [settings, setSettings] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     address: '',
-    date_of_birth: '',
     gender: '',
     discount_percentage: 0,
     notes: ''
@@ -34,7 +34,30 @@ const Customers = () => {
 
   useEffect(() => {
     fetchCustomers();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await settingsAPI.getSettings();
+      setSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  // Helper function to get currency symbol from settings
+  const getCurrencySymbol = (currencyCode) => {
+    const currencyMap = {
+      'LKR': '₨',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'INR': '₹',
+      'JPY': '¥'
+    };
+    return currencyMap[currencyCode] || currencyCode;
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -88,7 +111,6 @@ const Customers = () => {
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
-      date_of_birth: customer.date_of_birth || '',
       gender: customer.gender || '',
       discount_percentage: customer.discount_percentage || 0,
       notes: customer.notes || ''
@@ -103,7 +125,6 @@ const Customers = () => {
       email: '',
       phone: '',
       address: '',
-      date_of_birth: '',
       gender: '',
       discount_percentage: 0,
       notes: ''
@@ -222,7 +243,7 @@ const Customers = () => {
                 </div>
                 <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                   <CurrencyDollarIcon className="h-4 w-4" />
-                  <span>${(customer.total_spent || 0).toFixed(2)}</span>
+                  <span>{getCurrencySymbol(settings?.currency || 'LKR')} {parseFloat(customer.total_spent || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>

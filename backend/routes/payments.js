@@ -352,4 +352,70 @@ router.get('/analytics', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all transactions (payments)
+router.get('/transactions', authenticateToken, async (req, res) => {
+  try {
+    const { start_date, end_date, payment_method, status, limit = 50, offset = 0 } = req.query;
+    
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+    
+    if (start_date && end_date) {
+      whereClause += ' AND DATE(p.created_at) BETWEEN ? AND ?';
+      params.push(start_date, end_date);
+    }
+    
+    if (payment_method) {
+      whereClause += ' AND p.payment_method = ?';
+      params.push(payment_method);
+    }
+    
+    if (status) {
+      whereClause += ' AND p.payment_status = ?';
+      params.push(status);
+    }
+    
+    const sql = `
+      SELECT 
+        p.*,
+        s.invoice,
+        s.customer_name,
+        s.total_amount as sale_total,
+        u.full_name as processed_by_name
+      FROM payments p
+      LEFT JOIN sales s ON p.sale_id = s.id
+      LEFT JOIN users u ON p.processed_by = u.id
+      ${whereClause}
+      ORDER BY p.created_at DESC
+      LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+    `;
+    
+    const result = await executeQuery(sql, params);
+    const transactions = result.rows || result;
+    
+    // Get total count
+    const countSQL = `
+      SELECT COUNT(*) as total_count
+      FROM payments p
+      LEFT JOIN sales s ON p.sale_id = s.id
+      ${whereClause}
+    `;
+    
+    const countResult = await executeQuery(countSQL, params);
+    const total_count = (countResult.rows || countResult)[0].total_count;
+    
+    res.json({ 
+      transactions,
+      pagination: {
+        total: parseInt(total_count),
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
+  } catch (err) {
+    console.error('Get transactions error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { barcodesAPI } from '../services/api';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { barcodesAPI, settingsAPI } from '../services/api';
 import {
   QrCodeIcon,
   MagnifyingGlassIcon,
@@ -11,8 +11,21 @@ const BarcodeScanner = ({ onScan, onClose }) => {
   const [manualCode, setManualCode] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [settings, setSettings] = useState(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await settingsAPI.getSettings();
+        setSettings(response.data);
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const startScanning = useCallback(async () => {
     try {
@@ -137,7 +150,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
             <div className="text-sm text-green-700">
               <p><strong>Name:</strong> {result.item_name}</p>
               <p><strong>SKU:</strong> {result.sku}</p>
-              <p><strong>Price:</strong> ${result.sell_price?.toFixed(2)}</p>
+              <p><strong>Price:</strong> {settings?.currency || 'LKR'} {result.sell_price?.toFixed(2)}</p>
               <p><strong>Stock:</strong> {result.quantity} units</p>
             </div>
           </div>

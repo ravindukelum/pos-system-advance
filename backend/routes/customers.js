@@ -31,10 +31,10 @@ const generateCustomerCode = () => {
 
 // Validation middleware
 const validateCustomer = [
-  body('name').isLength({ min: 2, max: 255 }).withMessage('Name must be 2-255 characters'),
-  body('email').optional({ nullable: true }).isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('phone').optional({ nullable: true }).isLength({ min: 10, max: 20 }).withMessage('Phone must be 10-20 characters'),
-  body('gender').optional({ nullable: true }).isIn(['male', 'female', 'other']).withMessage('Gender must be male, female, or other'),
+  body('name').notEmpty().withMessage('Name is required'),
+  body('email').optional({ checkFalsy: true }).isEmail().withMessage('Valid email is required'),
+  body('phone').notEmpty().isMobilePhone().withMessage('Valid phone number is required'),
+  body('gender').optional({ checkFalsy: true }).isIn(['male', 'female', 'other']).withMessage('Gender must be male, female, or other'),
   body('discount_percentage').optional().isFloat({ min: 0, max: 100 }).withMessage('Discount percentage must be between 0 and 100')
 ];
 
@@ -57,8 +57,9 @@ router.get('/', authenticateToken, async (req, res) => {
       params.push(status);
     }
     
-    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    const limitNum = parseInt(limit) || 50;
+    const offsetNum = parseInt(offset) || 0;
+    sql += ` ORDER BY created_at DESC LIMIT ${limitNum} OFFSET ${offsetNum}`;
     
     const result = await executeQuery(sql, params);
     const customers = result.rows || result;
@@ -156,39 +157,22 @@ router.post('/', authenticateToken, validateCustomer, async (req, res) => {
 
     const { 
       name, 
-      email, 
+      email = null, 
       phone, 
-      address, 
-      date_of_birth, 
-      gender, 
+      address = null, 
+      date_of_birth = null, 
+      gender = null, 
       discount_percentage = 0,
-      notes 
+      notes = null 
     } = req.body;
 
-    // Check if customer with same email or phone already exists
-    if (email || phone) {
-      let checkSql = 'SELECT id FROM customers WHERE ';
-      const checkParams = [];
-      const conditions = [];
-      
-      if (email) {
-        conditions.push('email = ?');
-        checkParams.push(email);
-      }
-      
-      if (phone) {
-        conditions.push('phone = ?');
-        checkParams.push(phone);
-      }
-      
-      checkSql += conditions.join(' OR ');
-      
-      const existingResult = await executeQuery(checkSql, checkParams);
-      const existing = existingResult.rows || existingResult;
-      
-      if (existing.length > 0) {
-        return res.status(400).json({ error: 'Customer with this email or phone already exists' });
-      }
+    // Check if customer with same phone already exists
+    const checkSql = 'SELECT id FROM customers WHERE phone = ?';
+    const existingResult = await executeQuery(checkSql, [phone]);
+    const existing = existingResult.rows || existingResult;
+    
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Customer with this phone number already exists' });
     }
 
     const customer_code = generateCustomerCode();
@@ -200,9 +184,18 @@ router.post('/', authenticateToken, validateCustomer, async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
+    // Handle empty date_of_birth - convert empty string to null
+    const processedDateOfBirth = date_of_birth && date_of_birth.trim() !== '' ? date_of_birth : null;
+    // Handle empty email - convert empty string to null
+    const processedEmail = email && email.trim() !== '' ? email : null;
+    // Handle empty address - convert empty string to null
+    const processedAddress = address && address.trim() !== '' ? address : null;
+    // Handle empty notes - convert empty string to null
+    const processedNotes = notes && notes.trim() !== '' ? notes : null;
+    
     const result = await executeQuery(sql, [
-      customer_code, name, email, phone, address, date_of_birth,
-      gender, discount_percentage, notes, 'active'
+      customer_code, name, processedEmail, phone, processedAddress, processedDateOfBirth,
+      gender, discount_percentage, processedNotes, 'active'
     ]);
     
     const isPostgreSQL = process.env.DATABASE_URL ? true : false;
@@ -285,8 +278,11 @@ router.put('/:id', authenticateToken, validateCustomer, async (req, res) => {
       WHERE id = ?
     `;
     
+    // Handle empty date_of_birth - convert empty string to null
+    const processedDateOfBirth = date_of_birth && date_of_birth.trim() !== '' ? date_of_birth : null;
+    
     const result = await executeQuery(sql, [
-      name, email, phone, address, date_of_birth,
+      name, email, phone, address, processedDateOfBirth,
       gender, discount_percentage, notes, status || 'active', req.params.id
     ]);
 

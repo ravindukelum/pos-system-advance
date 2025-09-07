@@ -22,7 +22,7 @@ const PrintInvoice = ({ sale, onClose }) => {
         console.error('Error fetching data:', error);
         // Use default settings if API fails
         setSettings({
-          shopName: 'SMALL POS SYSTEM',
+          shopName: 'Your Shop',
           shopPhone: '',
           shopEmail: '',
           shopAddress: '',

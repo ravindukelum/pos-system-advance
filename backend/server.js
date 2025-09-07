@@ -61,7 +61,7 @@ const customersRoutes = require('./routes/customers');
 const barcodesRoutes = require('./routes/barcodes');
 const paymentsRoutes = require('./routes/payments');
 const reportsRoutes = require('./routes/reports');
-const employeesRoutes = require('./routes/employees');
+const usersRoutes = require('./routes/users');
 const locationsRoutes = require('./routes/locations');
 const integrationsRoutes = require('./routes/integrations');
 
@@ -77,7 +77,7 @@ app.use('/api/customers', customersRoutes);
 app.use('/api/barcodes', barcodesRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/reports', reportsRoutes);
-app.use('/api/employees', employeesRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/locations', locationsRoutes);
 app.use('/api/integrations', integrationsRoutes);
 
