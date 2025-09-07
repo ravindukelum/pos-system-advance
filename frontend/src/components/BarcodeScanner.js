@@ -19,7 +19,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     const fetchSettings = async () => {
       try {
         const response = await settingsAPI.getSettings();
-        setSettings(response.data);
+        setSettings(response.data.settings || {});
       } catch (error) {
         console.error('Error fetching settings:', error);
       }

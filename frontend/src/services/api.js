@@ -181,30 +181,40 @@ export const paymentsAPI = {
 // Reports API
 export const reportsAPI = {
   getSalesReport: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/reports/sales?${queryString}`);
+    return api.get('/reports/sales', { params });
   },
   getProductReport: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/reports/products?${queryString}`);
+    return api.get('/reports/products', { params });
   },
   getCustomerReport: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/reports/customers?${queryString}`);
+    return api.get('/reports/customers', { params });
   },
   getFinancialReport: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/reports/financial?${queryString}`);
+    return api.get('/reports/financial', { params });
   },
   getTaxReport: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/reports/tax?${queryString}`);
+    return api.get('/reports/tax', { params });
+  },
+  getInventoryReport: (params = {}) => {
+    return api.get('/reports/inventory', { params });
   },
   exportCSV: (reportType, params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return api.get(`/reports/${reportType}/export?${queryString}`, {
+    return api.get(`/reports/export/${reportType}`, {
+      params: { ...params, format: 'csv' },
       responseType: 'blob'
     });
+  },
+  exportPDF: (reportType, params = {}) => {
+    return api.get(`/reports/export/${reportType}`, {
+      params: { ...params, format: 'pdf' },
+      responseType: 'blob'
+    });
+  },
+  getAnalyticsSummary: (params = {}) => {
+    return api.get('/reports/analytics/summary', { params });
+  },
+  getCategoriesAnalytics: (params = {}) => {
+    return api.get('/reports/analytics/categories', { params });
   },
 };
 

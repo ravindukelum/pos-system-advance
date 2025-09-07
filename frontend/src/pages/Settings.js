@@ -43,8 +43,27 @@ const Settings = () => {
     try {
       setLoading(true);
       const response = await settingsAPI.getSettings();
-      if (response.data) {
-        setSettings(response.data);
+      if (response.data && response.data.settings) {
+        // Ensure all values are strings to maintain controlled inputs
+        const settingsData = response.data.settings;
+        setSettings({
+          shopName: settingsData.shopName || '',
+          shopPhone: settingsData.shopPhone || '',
+          shopEmail: settingsData.shopEmail || '',
+          shopAddress: settingsData.shopAddress || '',
+          shopCity: settingsData.shopCity || '',
+          shopState: settingsData.shopState || '',
+          shopZipCode: settingsData.shopZipCode || '',
+          shopLogoUrl: settingsData.shopLogoUrl || '',
+          taxRate: settingsData.taxRate?.toString() || '',
+          currency: settingsData.currency || 'USD',
+          countryCode: settingsData.countryCode || '+94',
+          warrantyPeriod: settingsData.warrantyPeriod?.toString() || '30',
+          warrantyTerms: settingsData.warrantyTerms || 'Standard warranty terms apply. Items must be returned in original condition.',
+          receiptFooter: settingsData.receiptFooter || 'Thank you for your business!',
+          businessRegistration: settingsData.businessRegistration || '',
+          taxId: settingsData.taxId || ''
+        });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -59,7 +78,7 @@ const Settings = () => {
     const { name, value } = e.target;
     setSettings(prev => ({
       ...prev,
-      [name]: value
+      [name]: value || '' // Ensure value is never undefined
     }));
   };
 
@@ -67,7 +86,13 @@ const Settings = () => {
     e.preventDefault();
     try {
       setLoading(true);
-      await settingsAPI.updateSettings(settings);
+      // Convert string values back to appropriate types for backend
+      const settingsToSave = {
+        ...settings,
+        taxRate: parseFloat(settings.taxRate) || 0,
+        warrantyPeriod: parseInt(settings.warrantyPeriod) || 30
+      };
+      await settingsAPI.updateSettings(settingsToSave);
       setMessage('Settings saved successfully!');
       setMessageType('success');
       setTimeout(() => {

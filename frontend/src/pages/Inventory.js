@@ -922,8 +922,8 @@ const Inventory = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Profit Margin</label>
                     <p className="mt-1 text-sm text-gray-900 dark:text-white">
-                      RS {(viewingItem.sell_price - viewingItem.buy_price).toFixed(2)} 
-                      ({(((viewingItem.sell_price - viewingItem.buy_price) / viewingItem.buy_price) * 100).toFixed(1)}%)
+                      RS {((viewingItem.sell_price || 0) - (viewingItem.buy_price || 0)).toFixed(2)} 
+                      ({((((viewingItem.sell_price || 0) - (viewingItem.buy_price || 0)) / (viewingItem.buy_price || 1)) * 100).toFixed(1)}%)
                     </p>
                   </div>
                 

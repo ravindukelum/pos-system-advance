@@ -112,16 +112,16 @@ const Sales = () => {
       // Fetch settings and sale details
       const settingsResponse = await settingsAPI.getSettings();
       const saleResponse = await salesAPI.getById(sale.id);
-      const settings = settingsResponse.data;
+      const settings = settingsResponse.data.settings || {};
       const saleDetails = saleResponse.data.sale;
       
       // Calculate totals
       const subtotal = saleDetails.items?.reduce((sum, item) => sum + parseFloat(item.line_total), 0) || 0;
       const tax = parseFloat(saleDetails.tax_amount || 0);
       const discount = parseFloat(sale.discount_amount || 0);
-      const total = parseFloat(sale.total_amount);
-      const paid = parseFloat(sale.paid_amount || 0);
-      const balance = total - paid;
+      const total = parseFloat(sale.total_amount || 0);
+    const paid = parseFloat(sale.paid_amount || 0);
+    const balance = total - paid;
       
       // Generate invoice HTML
       const invoiceHTML = `
@@ -248,7 +248,10 @@ const Sales = () => {
     }
   };
 
-  const sendWhatsApp = (sale) => {
+  const sendWhatsApp = async (sale) => {
+    console.log('WhatsApp function called with sale:', sale);
+    console.log('Current settings:', settings);
+    
     if (!sale.customer_phone) {
       alert('No phone number available for this customer');
       return;
@@ -258,16 +261,24 @@ const Sales = () => {
       ? sale.customer_phone.substring(1) 
       : settings.countryCode.substring(1) + sale.customer_phone;
     
+    console.log('Formatted phone number:', phone);
     const currencySymbol = getCurrencySymbol(settings.currency || 'LKR');
     
-    // Parse sale items for detailed breakdown
+    // Get detailed sale items from backend
     let itemsText = '';
     try {
-      const items = JSON.parse(sale.items || '[]');
-      itemsText = items.map((item, index) => 
-        `${index + 1}. ${item.name}\n   Qty: ${item.quantity} × ${currencySymbol}${item.price} = ${currencySymbol}${(item.quantity * item.price).toFixed(2)}`
-      ).join('\n\n');
+      const saleResponse = await salesAPI.getById(sale.id);
+      const saleDetails = saleResponse.data.sale;
+      
+      if (saleDetails.items && saleDetails.items.length > 0) {
+        itemsText = saleDetails.items.map((item, index) => 
+          `${index + 1}. ${item.item_name}\n   Qty: ${item.quantity} × ${currencySymbol}${parseFloat(item.unit_price).toFixed(2)} = ${currencySymbol}${parseFloat(item.line_total).toFixed(2)}`
+        ).join('\n\n');
+      } else {
+        itemsText = 'Items details not available';
+      }
     } catch (error) {
+      console.error('Error fetching sale details for WhatsApp:', error);
       itemsText = 'Items details not available';
     }
     
@@ -299,7 +310,20 @@ const Sales = () => {
       `_This is an automated receipt. Please save for your records._`;
     
     const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    console.log('WhatsApp URL:', whatsappUrl);
+    console.log('Message length:', message.length);
+    
+    try {
+      const result = window.open(whatsappUrl, '_blank');
+      console.log('Window.open result:', result);
+      if (!result) {
+        console.error('Pop-up blocked or failed to open');
+        alert('WhatsApp could not be opened. Please check if pop-ups are blocked or try copying the link manually.');
+      }
+    } catch (error) {
+      console.error('Error opening WhatsApp:', error);
+      alert('Error opening WhatsApp: ' + error.message);
+    }
   };
 
   const addToCart = (item) => {

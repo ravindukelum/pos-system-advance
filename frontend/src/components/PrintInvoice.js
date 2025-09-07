@@ -13,7 +13,7 @@ const PrintInvoice = ({ sale, onClose }) => {
       try {
         // Fetch settings
         const settingsResponse = await settingsAPI.getSettings();
-        setSettings(settingsResponse.data);
+        setSettings(settingsResponse.data.settings || {});
         
         // Fetch detailed sale information with items
         const saleResponse = await salesAPI.getById(sale.id);
