@@ -1,5 +1,6 @@
 const express = require('express');
 const Database = require('../database/db');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const router = express.Router();
 
 // Create database instance
@@ -213,7 +214,7 @@ router.get('/:id/sales', async (req, res) => {
 });
 
 // Delete location
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const sql = `DELETE FROM locations WHERE id = ${getParamPlaceholder(1)}`;
     const result = await executeQuery(sql, [req.params.id]);

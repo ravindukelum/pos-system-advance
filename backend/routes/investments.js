@@ -1,6 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const Database = require('../database/db');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const router = express.Router();
 
 // Create database instance
@@ -158,7 +159,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete investment
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const sql = 'DELETE FROM investments WHERE id = ?';
     

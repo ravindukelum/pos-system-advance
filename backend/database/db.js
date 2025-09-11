@@ -296,6 +296,7 @@ class Database {
           customer_id INTEGER,
           customer_name VARCHAR(255),
           customer_phone VARCHAR(50),
+          location_id INTEGER,
           total_amount DECIMAL(10,2) NOT NULL,
           paid_amount DECIMAL(10,2) DEFAULT 0,
           tax_amount DECIMAL(10,2) DEFAULT 0,
@@ -311,6 +312,7 @@ class Database {
           customer_id INT,
           customer_name VARCHAR(255),
           customer_phone VARCHAR(50),
+          location_id INT,
           total_amount DECIMAL(10,2) NOT NULL,
           paid_amount DECIMAL(10,2) DEFAULT 0,
           tax_amount DECIMAL(10,2) DEFAULT 0,
@@ -405,11 +407,11 @@ class Database {
           shop_city VARCHAR(50),
           shop_state VARCHAR(50),
           shop_zip_code VARCHAR(20),
+          shop_logo_url VARCHAR(500) DEFAULT '',
           tax_rate DECIMAL(5,2) DEFAULT 0.00,
           currency VARCHAR(10) DEFAULT 'USD',
           country_code VARCHAR(10) DEFAULT '+1',
-          warranty_period INTEGER DEFAULT 30,
-          warranty_terms TEXT,
+
           receipt_footer TEXT,
           business_registration VARCHAR(100),
           tax_id VARCHAR(50),
@@ -426,11 +428,11 @@ class Database {
           shop_city VARCHAR(50),
           shop_state VARCHAR(50),
           shop_zip_code VARCHAR(20),
+          shop_logo_url VARCHAR(500) DEFAULT '',
           tax_rate DECIMAL(5,2) DEFAULT 0.00,
           currency VARCHAR(10) DEFAULT 'USD',
           country_code VARCHAR(10) DEFAULT '+1',
-          warranty_period INT DEFAULT 30,
-          warranty_terms TEXT,
+
           receipt_footer TEXT,
           business_registration VARCHAR(100),
           tax_id VARCHAR(50),
@@ -463,6 +465,150 @@ class Database {
       `;
 
       await this.executeQuery(createUserSessionsTable);
+
+      // Create locations table for multi-location support
+      const createLocationsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS locations (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          address TEXT,
+          phone VARCHAR(50),
+          manager_id INT,
+          settings JSONB DEFAULT '{}',
+          status VARCHAR(20) CHECK (status IN ('active', 'inactive')) DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (manager_id) REFERENCES users (id)
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS locations (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          address TEXT,
+          phone VARCHAR(50),
+          manager_id INT,
+          settings JSON,
+          status ENUM('active', 'inactive') DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (manager_id) REFERENCES users (id)
+        )
+      `;
+      
+      await this.executeQuery(createLocationsTable);
+
+      // Create location_inventory table for location-specific inventory quantities
+      const createLocationInventoryTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS location_inventory (
+          id SERIAL PRIMARY KEY,
+          location_id INT NOT NULL,
+          item_id INT NOT NULL,
+          quantity INT NOT NULL DEFAULT 0,
+          min_stock INT DEFAULT 0,
+          max_stock INT DEFAULT 1000,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE CASCADE,
+          FOREIGN KEY (item_id) REFERENCES inventory (id) ON DELETE CASCADE,
+          UNIQUE(location_id, item_id)
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS location_inventory (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          location_id INT NOT NULL,
+          item_id INT NOT NULL,
+          quantity INT NOT NULL DEFAULT 0,
+          min_stock INT DEFAULT 0,
+          max_stock INT DEFAULT 1000,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE CASCADE,
+          FOREIGN KEY (item_id) REFERENCES inventory (id) ON DELETE CASCADE,
+          UNIQUE KEY unique_location_item (location_id, item_id)
+        )
+      `;
+      
+      await this.executeQuery(createLocationInventoryTable);
+
+      // Create inventory_transfers table for tracking transfers between locations
+      const createInventoryTransfersTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS inventory_transfers (
+          id SERIAL PRIMARY KEY,
+          from_location_id INT NOT NULL,
+          to_location_id INT NOT NULL,
+          item_id INT NOT NULL,
+          quantity INT NOT NULL,
+          transferred_by INT NOT NULL,
+          notes TEXT,
+          status VARCHAR(20) DEFAULT 'completed',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (from_location_id) REFERENCES locations (id),
+          FOREIGN KEY (to_location_id) REFERENCES locations (id),
+          FOREIGN KEY (item_id) REFERENCES inventory (id),
+          FOREIGN KEY (transferred_by) REFERENCES users (id)
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS inventory_transfers (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          from_location_id INT NOT NULL,
+          to_location_id INT NOT NULL,
+          item_id INT NOT NULL,
+          quantity INT NOT NULL,
+          transferred_by INT NOT NULL,
+          notes TEXT,
+          status VARCHAR(20) DEFAULT 'completed',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (from_location_id) REFERENCES locations (id),
+          FOREIGN KEY (to_location_id) REFERENCES locations (id),
+          FOREIGN KEY (item_id) REFERENCES inventory (id),
+          FOREIGN KEY (transferred_by) REFERENCES users (id)
+        )
+      `;
+      
+      await this.executeQuery(createInventoryTransfersTable);
+
+      // Create message_logs table for WhatsApp messaging
+      const createMessageLogsTable = isPostgreSQL ? `
+        CREATE TABLE IF NOT EXISTS message_logs (
+          id SERIAL PRIMARY KEY,
+          recipient_phone VARCHAR(20) NOT NULL,
+          message_type VARCHAR(50) NOT NULL,
+          template_name VARCHAR(100),
+          message_content TEXT NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending',
+          twilio_sid VARCHAR(100),
+          error_message TEXT,
+          sale_id INTEGER,
+          customer_id INTEGER,
+          sent_by INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (sale_id) REFERENCES sales(id),
+          FOREIGN KEY (customer_id) REFERENCES customers(id),
+          FOREIGN KEY (sent_by) REFERENCES users(id)
+        )
+      ` : `
+        CREATE TABLE IF NOT EXISTS message_logs (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          recipient_phone VARCHAR(20) NOT NULL,
+          message_type VARCHAR(50) NOT NULL,
+          template_name VARCHAR(100),
+          message_content TEXT NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending',
+          twilio_sid VARCHAR(100),
+          error_message TEXT,
+          sale_id INT,
+          customer_id INT,
+          sent_by INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (sale_id) REFERENCES sales(id),
+          FOREIGN KEY (customer_id) REFERENCES customers(id),
+          FOREIGN KEY (sent_by) REFERENCES users(id)
+        )
+      `;
+      
+      await this.executeQuery(createMessageLogsTable);
 
       // Run migrations to update existing tables
       await this.runMigrations();
@@ -508,6 +654,11 @@ class Database {
         'ALTER TABLE inventory ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
       ];
 
+      // Migration: Add missing columns to settings table
+      const settingsMigrations = [
+        'ALTER TABLE settings ADD COLUMN IF NOT EXISTS shop_logo_url VARCHAR(500) DEFAULT \'\'\''
+      ];
+
       // For MySQL, we need to check column existence before adding
       if (!isPostgreSQL) {
         // Helper function to check if column exists
@@ -534,8 +685,10 @@ class Database {
           { table: 'customers', column: 'notes', sql: 'ALTER TABLE customers ADD COLUMN notes TEXT' },
           { table: 'customers', column: 'status', sql: 'ALTER TABLE customers ADD COLUMN status ENUM(\'active\', \'inactive\') DEFAULT \'active\'' },
           { table: 'sales', column: 'subtotal', sql: 'ALTER TABLE sales ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0.00' },
+          { table: 'sales', column: 'location_id', sql: 'ALTER TABLE sales ADD COLUMN location_id INT' },
           { table: 'sales_items', column: 'sku', sql: 'ALTER TABLE sales_items ADD COLUMN sku VARCHAR(100)' },
-          { table: 'inventory', column: 'updated_at', sql: 'ALTER TABLE inventory ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' }
+          { table: 'inventory', column: 'updated_at', sql: 'ALTER TABLE inventory ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
+          { table: 'settings', column: 'shop_logo_url', sql: "ALTER TABLE settings ADD COLUMN shop_logo_url VARCHAR(500) DEFAULT ''" }
         ];
 
         for (const migration of mysqlMigrations) {
@@ -591,6 +744,77 @@ class Database {
             if (!err.message.includes('already exists')) {
               console.log('Migration info:', err.message);
             }
+          }
+        }
+        
+        for (const migration of settingsMigrations) {
+          try {
+            await this.executeQuery(migration);
+          } catch (err) {
+            // Ignore duplicate column errors
+            if (!err.message.includes('already exists')) {
+              console.log('Migration info:', err.message);
+            }
+          }
+        }
+      }
+
+      // Foreign key constraint updates for cascade delete (MySQL only)
+      if (!isPostgreSQL) {
+        const foreignKeyUpdates = [
+          {
+            name: 'sales_items_sale_id_cascade',
+            update: async () => {
+              try {
+                // Drop existing foreign key (using known constraint name)
+                await this.executeQuery('ALTER TABLE sales_items DROP FOREIGN KEY sales_items_ibfk_1');
+                console.log('Dropped existing sales_items foreign key constraint');
+              } catch (err) {
+                console.log('Foreign key sales_items_ibfk_1 may not exist:', err.message);
+              }
+              
+              try {
+                // Add new foreign key with cascade
+                await this.executeQuery(
+                  'ALTER TABLE sales_items ADD CONSTRAINT fk_sales_items_sale_id FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE'
+                );
+                console.log('Added CASCADE DELETE constraint for sales_items');
+              } catch (err) {
+                console.log('Failed to add CASCADE constraint for sales_items:', err.message);
+              }
+            }
+          },
+          {
+            name: 'payments_sale_id_cascade',
+            update: async () => {
+              try {
+                // Drop existing foreign key (using known constraint name)
+                await this.executeQuery('ALTER TABLE payments DROP FOREIGN KEY payments_ibfk_1');
+                console.log('Dropped existing payments foreign key constraint');
+              } catch (err) {
+                console.log('Foreign key payments_ibfk_1 may not exist:', err.message);
+              }
+              
+              try {
+                // Add new foreign key with cascade
+                await this.executeQuery(
+                  'ALTER TABLE payments ADD CONSTRAINT fk_payments_sale_id FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE'
+                );
+                console.log('Added CASCADE DELETE constraint for payments');
+              } catch (err) {
+                console.log('Failed to add CASCADE constraint for payments:', err.message);
+              }
+            }
+          }
+        ];
+
+        // Apply foreign key updates
+        for (const fkUpdate of foreignKeyUpdates) {
+          try {
+            await fkUpdate.update();
+            console.log(`Processed foreign key constraint: ${fkUpdate.name}`);
+          } catch (err) {
+            console.log(`Foreign key update failed for ${fkUpdate.name}:`, err.message);
           }
         }
       }
@@ -788,21 +1012,21 @@ class Database {
 
       if (salesCount == 0) {
         const insertSalesSQL = isPostgreSQL ? `
-          INSERT INTO sales (invoice, date, customer_id, customer_name, customer_phone, total_amount, paid_amount, tax_amount, discount_amount, status) VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10),
-          ($11, $12, $13, $14, $15, $16, $17, $18, $19, $20),
-          ($21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+          INSERT INTO sales (invoice, date, customer_id, customer_name, customer_phone, total_amount, paid_amount, tax_amount, discount_amount, status, location_id) VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11),
+          ($12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22),
+          ($23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
         ` : `
-          INSERT INTO sales (invoice, date, customer_id, customer_name, customer_phone, total_amount, paid_amount, tax_amount, discount_amount, status) VALUES
-          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO sales (invoice, date, customer_id, customer_name, customer_phone, total_amount, paid_amount, tax_amount, discount_amount, status, location_id) VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         await this.executeQuery(insertSalesSQL, [
-          'INV001', '2024-01-15', 1, 'John Smith', '+1234567801', 94.97, 94.97, 7.60, 0.00, 'paid',
-          'INV002', '2024-01-16', 2, 'Sarah Johnson', '+1234567802', 14.99, 14.99, 1.20, 5.00, 'paid',
-          'INV003', '2024-01-17', null, 'Walk-in Customer', null, 49.99, 0.00, 4.00, 0.00, 'unpaid'
+          'INV001', '2024-01-15', 1, 'John Smith', '+1234567801', 94.97, 94.97, 7.60, 0.00, 'paid', 1,
+          'INV002', '2024-01-16', 2, 'Sarah Johnson', '+1234567802', 14.99, 14.99, 1.20, 5.00, 'paid', 1,
+          'INV003', '2024-01-17', null, 'Walk-in Customer', null, 49.99, 0.00, 4.00, 0.00, 'unpaid', 1
         ]);
       }
 
@@ -829,11 +1053,11 @@ class Database {
         `;
 
         await this.executeQuery(insertSalesItemsSQL, [
-          1, 1, 'Wireless Mouse', 2, 24.99, 49.98,
-          1, 2, 'Bluetooth Keyboard', 1, 69.99, 69.99,
-          2, 3, 'USB-C Cable', 1, 14.99, 14.99,
-          3, 4, 'Laptop Stand', 1, 49.99, 49.99,
-          1, 3, 'USB-C Cable', 1, 14.99, 14.99
+          7, 10, 'Wireless Mouse', 2, 24.99, 49.98,
+          7, 11, 'Bluetooth Keyboard', 1, 69.99, 69.99,
+          8, 12, 'USB-C Cable', 1, 14.99, 14.99,
+          9, 13, 'Laptop Stand', 1, 49.99, 49.99,
+          7, 12, 'USB-C Cable', 1, 14.99, 14.99
         ]);
       }
 
@@ -859,33 +1083,100 @@ class Database {
         ]);
       }
 
+      // Insert default locations
+      const checkLocationsSQL = 'SELECT COUNT(*) as count FROM locations';
+      const locationsCountResult = await this.executeQuery(checkLocationsSQL);
+      const locationsCount = isPostgreSQL ? locationsCountResult.rows[0].count : locationsCountResult[0].count;
+
+      if (locationsCount == 0) {
+        const insertLocationsSQL = isPostgreSQL ? `
+          INSERT INTO locations (name, address, phone, manager_id, status) VALUES
+          ($1, $2, $3, $4, $5),
+          ($6, $7, $8, $9, $10),
+          ($11, $12, $13, $14, $15)
+        ` : `
+          INSERT INTO locations (name, address, phone, manager_id, status) VALUES
+          (?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?),
+          (?, ?, ?, ?, ?)
+        `;
+
+        await this.executeQuery(insertLocationsSQL, [
+          'Main Store', '123 Main Street, New York, NY 10001', '+1-555-123-4567', 2, 'active',
+          'Downtown Branch', '456 Downtown Ave, New York, NY 10002', '+1-555-123-4568', 2, 'active',
+          'Mall Location', '789 Shopping Mall, New York, NY 10003', '+1-555-123-4569', 2, 'active'
+        ]);
+      }
+
+      // Insert location inventory (distribute existing inventory across locations)
+      const checkLocationInventorySQL = 'SELECT COUNT(*) as count FROM location_inventory';
+      const locationInventoryCountResult = await this.executeQuery(checkLocationInventorySQL);
+      const locationInventoryCount = isPostgreSQL ? locationInventoryCountResult.rows[0].count : locationInventoryCountResult[0].count;
+
+      if (locationInventoryCount == 0) {
+        // Get all inventory items
+        const getInventorySQL = 'SELECT id, quantity FROM inventory';
+        const inventoryItems = await this.executeQuery(getInventorySQL);
+        const items = isPostgreSQL ? inventoryItems.rows : inventoryItems;
+
+        // Get all locations
+        const getLocationsSQL = 'SELECT id FROM locations';
+        const locationsResult = await this.executeQuery(getLocationsSQL);
+        const locations = isPostgreSQL ? locationsResult.rows : locationsResult;
+
+        // Distribute inventory across locations
+        for (const item of items) {
+          const totalQuantity = item.quantity;
+          const quantityPerLocation = Math.floor(totalQuantity / locations.length);
+          const remainder = totalQuantity % locations.length;
+
+          for (let i = 0; i < locations.length; i++) {
+            const locationId = locations[i].id;
+            let quantity = quantityPerLocation;
+            
+            // Add remainder to first location
+            if (i === 0) {
+              quantity += remainder;
+            }
+
+            const insertLocationInventorySQL = isPostgreSQL ? `
+              INSERT INTO location_inventory (location_id, item_id, quantity, min_stock, max_stock) VALUES
+              ($1, $2, $3, $4, $5)
+            ` : `
+              INSERT INTO location_inventory (location_id, item_id, quantity, min_stock, max_stock) VALUES
+              (?, ?, ?, ?, ?)
+            `;
+
+            await this.executeQuery(insertLocationInventorySQL, [
+              locationId, item.id, quantity, 5, 100
+            ]);
+          }
+        }
+      }
+
       // Insert default settings
       const checkSettingsSQL = 'SELECT COUNT(*) as count FROM settings';
       const settingsCountResult = await this.executeQuery(checkSettingsSQL);
       const settingsCount = isPostgreSQL ? settingsCountResult.rows[0].count : settingsCountResult[0].count;
 
       if (settingsCount == 0) {
-        const warrantyTerms = 'Standard warranty terms apply. Items can be returned within the warranty period with proof of purchase.';
         const receiptFooter = 'Thank you for your business! Visit us again soon.';
 
         const insertSettingsSQL = isPostgreSQL ? `
           INSERT INTO settings (
-            shop_name, shop_phone, shop_email, shop_address, shop_city, shop_state, shop_zip_code,
-            tax_rate, currency, country_code, warranty_period, 
-            warranty_terms, receipt_footer, business_registration, tax_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            shop_name, shop_phone, shop_email, shop_address, shop_city, shop_state, shop_zip_code, shop_logo_url,
+            tax_rate, currency, country_code, receipt_footer, business_registration, tax_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ` : `
           INSERT INTO settings (
-            shop_name, shop_phone, shop_email, shop_address, shop_city, shop_state, shop_zip_code,
-            tax_rate, currency, country_code, warranty_period, 
-            warranty_terms, receipt_footer, business_registration, tax_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            shop_name, shop_phone, shop_email, shop_address, shop_city, shop_state, shop_zip_code, shop_logo_url,
+            tax_rate, currency, country_code, receipt_footer, business_registration, tax_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         await this.executeQuery(insertSettingsSQL, [
-          'TechStore POS', '+1-555-123-4567', 'info@techstore.com', '123 Main Street', 'New York', 'NY', '10001',
-          8.25, 'USD', '+1', 30, 
-          warrantyTerms, receiptFooter, 'REG123456789', 'TAX987654321'
+          'TechStore POS', '+1-555-123-4567', 'info@techstore.com', '123 Main Street', 'New York', 'NY', '10001', '',
+          8.25, 'USD', '+1', receiptFooter, 'REG123456789', 'TAX987654321'
         ]);
       }
 

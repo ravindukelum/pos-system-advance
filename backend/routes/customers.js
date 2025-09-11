@@ -192,10 +192,12 @@ router.post('/', authenticateToken, validateCustomer, async (req, res) => {
     const processedAddress = address && address.trim() !== '' ? address : null;
     // Handle empty notes - convert empty string to null
     const processedNotes = notes && notes.trim() !== '' ? notes : null;
+    // Handle empty gender - convert empty string to null for ENUM compatibility
+    const processedGender = gender && gender.trim() !== '' ? gender : null;
     
     const result = await executeQuery(sql, [
       customer_code, name, processedEmail, phone, processedAddress, processedDateOfBirth,
-      gender, discount_percentage, processedNotes, 'active'
+      processedGender, discount_percentage, processedNotes, 'active'
     ]);
     
     const isPostgreSQL = process.env.DATABASE_URL ? true : false;
@@ -281,9 +283,12 @@ router.put('/:id', authenticateToken, validateCustomer, async (req, res) => {
     // Handle empty date_of_birth - convert empty string to null
     const processedDateOfBirth = date_of_birth && date_of_birth.trim() !== '' ? date_of_birth : null;
     
+    // Handle empty gender - convert empty string to null for ENUM compatibility
+    const processedGender = gender && gender.trim() !== '' ? gender : null;
+    
     const result = await executeQuery(sql, [
       name, email, phone, address, processedDateOfBirth,
-      gender, discount_percentage, notes, status || 'active', req.params.id
+      processedGender, discount_percentage, notes, status || 'active', req.params.id
     ]);
 
     const isPostgreSQL = process.env.DATABASE_URL ? true : false;
@@ -419,7 +424,7 @@ router.get('/:id/analytics', authenticateToken, async (req, res) => {
 });
 
 // Delete customer (soft delete)
-router.delete('/:id', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const sql = 'UPDATE customers SET status = ?, updated_at = NOW() WHERE id = ?';
     const result = await executeQuery(sql, ['inactive', req.params.id]);

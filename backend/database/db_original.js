@@ -917,8 +917,7 @@ class Database {
           taxRate DECIMAL(5,2) DEFAULT 0,
           currency VARCHAR(10) DEFAULT 'USD',
           countryCode VARCHAR(10) DEFAULT '+94',
-          warrantyPeriod INT DEFAULT 30,
-          warrantyTerms TEXT,
+
           receiptFooter TEXT,
           businessRegistration VARCHAR(255) DEFAULT '',
           taxId VARCHAR(255) DEFAULT '',
@@ -939,8 +938,7 @@ class Database {
           taxRate DECIMAL(5,2) DEFAULT 0,
           currency VARCHAR(10) DEFAULT 'USD',
           countryCode VARCHAR(10) DEFAULT '+94',
-          warrantyPeriod INT DEFAULT 30,
-          warrantyTerms TEXT,
+
           receiptFooter TEXT,
           businessRegistration VARCHAR(255) DEFAULT '',
           taxId VARCHAR(255) DEFAULT '',
@@ -959,14 +957,13 @@ class Database {
         try {
           const insertSettingsSQL = `INSERT INTO settings (
             shopName, shopPhone, shopEmail, shopAddress, shopCity, shopState, shopZipCode, shopLogoUrl,
-            taxRate, currency, countryCode, warrantyPeriod, warrantyTerms, receiptFooter,
+            taxRate, currency, countryCode, receiptFooter,
             businessRegistration, taxId
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
           
           await this.executeQuery(insertSettingsSQL, [
             'My POS Shop', '', '', '', '', '', '', '',
-            0, 'USD', '+94', 30, 'Standard warranty terms apply. Items must be returned in original condition.',
-            'Thank you for your business!', '', ''
+            0, 'USD', '+94', 'Thank you for your business!', '', ''
           ]);
           
           console.log('Default settings created successfully');

@@ -1,6 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const Database = require('../database/db');
+const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const router = express.Router();
 
 // Create database instance
@@ -141,11 +142,17 @@ router.post('/', async (req, res) => {
     tax_rate = 0, 
     discount_amount = 0, 
     paid_amount = 0, 
-    date 
+    date,
+    location_id 
   } = req.body;
   
   if (!items || !Array.isArray(items) || items.length === 0) {
     res.status(400).json({ error: 'Items array is required and must not be empty' });
+    return;
+  }
+  
+  if (!location_id) {
+    res.status(400).json({ error: 'Location ID is required for sales' });
     return;
   }
   
@@ -168,6 +175,7 @@ router.post('/', async (req, res) => {
     
     // Process each item
     for (const item of items) {
+      // Get item details from inventory table
       const getItemSql = 'SELECT * FROM inventory WHERE id = ?';
       const [inventoryRows] = await db.execute(getItemSql, [item.item_id]);
       const inventoryItem = inventoryRows[0];
@@ -178,11 +186,25 @@ router.post('/', async (req, res) => {
         return;
       }
       
-      if (inventoryItem.quantity < item.quantity) {
+      // Check location-specific inventory
+      const getLocationInventorySql = 'SELECT quantity FROM location_inventory WHERE item_id = ? AND location_id = ?';
+      const [locationInventoryRows] = await db.execute(getLocationInventorySql, [item.item_id, location_id]);
+      
+      if (locationInventoryRows.length === 0) {
         await db.rollback();
         res.status(400).json({ 
-          error: `Insufficient stock for ${inventoryItem.item_name}`, 
-          available: inventoryItem.quantity, 
+          error: `Item ${inventoryItem.item_name} is not available at this location` 
+        });
+        return;
+      }
+      
+      const locationInventory = locationInventoryRows[0];
+      
+      if (locationInventory.quantity < item.quantity) {
+        await db.rollback();
+        res.status(400).json({ 
+          error: `Insufficient stock for ${inventoryItem.item_name} at this location`, 
+          available: locationInventory.quantity, 
           requested: item.quantity 
         });
         return;
@@ -216,15 +238,15 @@ router.post('/', async (req, res) => {
     const insertSaleSql = `
       INSERT INTO sales (
         invoice, date, customer_name, customer_phone, 
-        subtotal, tax_amount, discount_amount, total_amount, 
-        paid_amount, status
+        tax_amount, discount_amount, total_amount, 
+        paid_amount, status, location_id
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     const [saleResult] = await db.execute(insertSaleSql, [
       invoice, saleDate, customer_name, customer_phone,
-      subtotal, taxAmount, discount_amount, totalAmount,
-      paid_amount, status
+      taxAmount, discount_amount, totalAmount,
+      paid_amount, status, location_id
     ]);
     
     const saleId = saleResult.insertId;
@@ -244,9 +266,9 @@ router.post('/', async (req, res) => {
         saleItem.unit_price, saleItem.line_total
       ]);
       
-      // Update inventory
-      const updateInventorySql = 'UPDATE inventory SET quantity = quantity - ? WHERE id = ?';
-      await db.execute(updateInventorySql, [saleItem.quantity, saleItem.item_id]);
+      // Update location inventory
+      const updateLocationInventorySql = 'UPDATE location_inventory SET quantity = quantity - ? WHERE item_id = ? AND location_id = ?';
+      await db.execute(updateLocationInventorySql, [saleItem.quantity, saleItem.item_id, location_id]);
     }
     
     await db.commit();
@@ -317,9 +339,21 @@ router.patch('/:id/payment', async (req, res) => {
 });
 
 // Delete sale (with all items)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     await db.beginTransaction();
+    
+    // Get sale details including location_id
+    const getSaleSql = 'SELECT location_id FROM sales WHERE id = ?';
+    const [saleRows] = await db.execute(getSaleSql, [req.params.id]);
+    
+    if (saleRows.length === 0) {
+      await db.rollback();
+      res.status(404).json({ error: 'Sale not found' });
+      return;
+    }
+    
+    const sale = saleRows[0];
     
     // Get sale items first to restore inventory
     const getItemsSql = 'SELECT * FROM sales_items WHERE sale_id = ?';
@@ -339,10 +373,10 @@ router.delete('/:id', async (req, res) => {
       return;
     }
     
-    // Restore inventory for each item
+    // Restore location inventory for each item
     for (const item of items) {
-      const restoreInventorySql = 'UPDATE inventory SET quantity = quantity + ? WHERE id = ?';
-      await db.execute(restoreInventorySql, [item.quantity, item.item_id]);
+      const restoreLocationInventorySql = 'UPDATE location_inventory SET quantity = quantity + ? WHERE item_id = ? AND location_id = ?';
+      await db.execute(restoreLocationInventorySql, [item.quantity, item.item_id, sale.location_id]);
     }
     
     await db.commit();

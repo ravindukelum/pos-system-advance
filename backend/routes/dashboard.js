@@ -265,4 +265,94 @@ router.get('/low-stock-alerts', async (req, res) => {
   }
 });
 
+// Get location-based sales analytics
+router.get('/location-sales', async (req, res) => {
+  try {
+    const { start_date, end_date, group_by } = req.query;
+    
+    let whereClause = '';
+    let params = [];
+    
+    if (start_date && end_date) {
+      whereClause = 'WHERE DATE(s.created_at) BETWEEN ? AND ?';
+      params = [start_date, end_date];
+    } else if (start_date) {
+      whereClause = 'WHERE DATE(s.created_at) >= ?';
+      params = [start_date];
+    } else if (end_date) {
+      whereClause = 'WHERE DATE(s.created_at) <= ?';
+      params = [end_date];
+    }
+    
+    // Get sales by location with location details
+    const locationSalesSql = `
+      SELECT 
+        COALESCE(l.name, 'Unknown Location') as location_name,
+        COALESCE(l.id, 0) as location_id,
+        COUNT(s.id) as total_sales,
+        SUM(s.total_amount) as total_revenue,
+        SUM(CASE WHEN s.status = 'paid' THEN s.total_amount ELSE 0 END) as paid_revenue,
+        SUM(CASE WHEN s.status = 'unpaid' THEN s.total_amount ELSE 0 END) as unpaid_revenue,
+        AVG(s.total_amount) as avg_sale_amount,
+        COUNT(CASE WHEN s.status = 'paid' THEN 1 END) as paid_sales,
+        COUNT(CASE WHEN s.status = 'unpaid' THEN 1 END) as unpaid_sales
+      FROM sales s
+      LEFT JOIN locations l ON s.location_id = l.id
+      ${whereClause}
+      GROUP BY l.id, l.name
+      ORDER BY total_revenue DESC
+    `;
+    
+    const [locationResults] = await db.execute(locationSalesSql, params);
+    
+    // Get top selling items by location
+    const topItemsByLocationSql = `
+      SELECT 
+        COALESCE(l.name, 'Unknown Location') as location_name,
+        COALESCE(l.id, 0) as location_id,
+        si.item_name,
+        SUM(si.quantity) as total_quantity_sold,
+        SUM(si.line_total) as total_revenue
+      FROM sales s
+      LEFT JOIN locations l ON s.location_id = l.id
+      LEFT JOIN sales_items si ON s.id = si.sale_id
+      ${whereClause}
+      GROUP BY l.id, l.name, si.item_id, si.item_name
+      ORDER BY l.id, total_quantity_sold DESC
+    `;
+    
+    const [topItemsResults] = await db.execute(topItemsByLocationSql, params);
+    
+    // Group top items by location
+    const topItemsByLocation = {};
+    topItemsResults.forEach(item => {
+      const locationKey = item.location_id || 0;
+      if (!topItemsByLocation[locationKey]) {
+        topItemsByLocation[locationKey] = {
+          location_name: item.location_name,
+          location_id: item.location_id,
+          items: []
+        };
+      }
+      topItemsByLocation[locationKey].items.push({
+        item_name: item.item_name,
+        total_quantity_sold: item.total_quantity_sold,
+        total_revenue: item.total_revenue
+      });
+    });
+    
+    // Limit to top 5 items per location
+    Object.keys(topItemsByLocation).forEach(locationKey => {
+      topItemsByLocation[locationKey].items = topItemsByLocation[locationKey].items.slice(0, 5);
+    });
+    
+    res.json({ 
+      locationSales: locationResults,
+      topItemsByLocation: Object.values(topItemsByLocation)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

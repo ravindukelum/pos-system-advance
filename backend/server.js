@@ -64,6 +64,7 @@ const reportsRoutes = require('./routes/reports');
 const usersRoutes = require('./routes/users');
 const locationsRoutes = require('./routes/locations');
 const integrationsRoutes = require('./routes/integrations');
+const notificationsRoutes = require('./routes/notifications');
 
 // Use routes
 app.use('/api/auth', authRoutes);
@@ -80,6 +81,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/locations', locationsRoutes);
 app.use('/api/integrations', integrationsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
