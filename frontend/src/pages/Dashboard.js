@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import toast from 'react-hot-toast';
+import LocationSalesChart from '../components/LocationSalesChart';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -305,6 +306,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Location-Based Sales Analytics */}
+      <LocationSalesChart />
     </div>
   );
 }

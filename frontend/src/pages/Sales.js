@@ -47,13 +47,24 @@ const Sales = () => {
   // Payment modal state
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  
+  // Location state
+  const [locations, setLocations] = useState([]);
+  const [selectedLocation, setSelectedLocation] = useState('');
 
   useEffect(() => {
     fetchSales();
     fetchInventory();
     fetchCustomers();
     fetchSettings();
+    fetchLocations();
   }, []);
+  
+  useEffect(() => {
+    if (selectedLocation) {
+      fetchInventory();
+    }
+  }, [selectedLocation]);
 
   const fetchSales = async () => {
     try {
@@ -68,10 +79,23 @@ const Sales = () => {
 
   const fetchInventory = async () => {
     try {
-      const response = await inventoryAPI.getAll();
+      const response = await inventoryAPI.getAll(selectedLocation);
       setInventory(response.data.inventory);
     } catch (error) {
       console.error('Error fetching inventory:', error);
+    }
+  };
+  
+  const fetchLocations = async () => {
+    try {
+      const response = await inventoryAPI.getLocations();
+      setLocations(response.data.locations || []);
+      // Set first location as default if available
+      if (response.data.locations && response.data.locations.length > 0) {
+        setSelectedLocation(response.data.locations[0].id.toString());
+      }
+    } catch (error) {
+      console.error('Error fetching locations:', error);
     }
   };
 
@@ -479,6 +503,11 @@ const Sales = () => {
       alert('Phone number is required for creating a sale');
       return;
     }
+    
+    if (!selectedLocation) {
+      alert('Please select a location for this sale');
+      return;
+    }
 
     try {
       // Auto-add customer if phone is provided
@@ -491,7 +520,8 @@ const Sales = () => {
         customer_phone: customerInfo.phone.trim(),
         tax_rate: invoiceSettings.taxRate,
         discount_amount: invoiceSettings.discountAmount,
-        paid_amount: invoiceSettings.paidAmount
+        paid_amount: invoiceSettings.paidAmount,
+        location_id: parseInt(selectedLocation)
       };
 
       await salesAPI.create(saleData);
@@ -835,10 +865,10 @@ const Sales = () => {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 p-4 sm:p-6">
+            <div className="overflow-y-auto flex-1 custom-scrollbar">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 p-4 sm:p-6 min-h-0 h-full">
               {/* Left Column - Inventory */}
-              <div>
+              <div className="flex flex-col min-h-0 max-h-[50vh] lg:max-h-full">
                 <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Available Items</h3>
                 
                 {/* Item Search */}
@@ -863,13 +893,18 @@ const Sales = () => {
                 </div>
 
                 {/* Items List */}
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="space-y-2 flex-1 min-h-0 max-h-96 lg:max-h-96 overflow-y-auto custom-scrollbar">
                   {filteredInventory.map((item) => (
                     <div key={item.id} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 bg-white dark:bg-gray-800">
                       <div className="flex-1">
                         <div className="font-medium text-gray-900 dark:text-white">{item.item_name}</div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">SKU: {item.sku}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">Stock: {item.quantity}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Stock: {selectedLocation && selectedLocation !== 'all' 
+                            ? `${item.location_quantity || 0} (${locations.find(loc => loc.id === selectedLocation)?.name || 'Unknown'})`
+                            : `${item.total_quantity || item.quantity} (${item.locations_count || 0} locations)`
+                          }
+                        </div>
                         <div className="text-sm font-medium text-green-600 dark:text-green-400">RS {item.sell_price}</div>
                       </div>
                       <button
@@ -885,7 +920,7 @@ const Sales = () => {
               </div>
 
               {/* Right Column - Cart & Invoice */}
-              <div className="flex flex-col h-full max-h-[calc(100vh-200px)] overflow-hidden">
+              <div className="flex flex-col min-h-0 max-h-[50vh] lg:max-h-[calc(100vh-200px)] overflow-hidden">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
                   <ShoppingCartIcon className="h-5 w-5" />
                   Cart ({(cart || []).length} items)
@@ -944,8 +979,31 @@ const Sales = () => {
                   </div>
                 </div>
 
+                {/* Location Selection */}
+                <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <h4 className="font-medium mb-2 text-gray-900 dark:text-white">Sale Location</h4>
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    required
+                  >
+                    <option value="">Select Location</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedLocation && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Inventory will be deducted from this location
+                    </p>
+                  )}
+                </div>
+
                 {/* Cart Items */}
-                <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+                <div className="space-y-2 mb-4 max-h-64 overflow-y-auto custom-scrollbar">
                   {(cart || []).map((item) => (
                     <div key={item.item_id} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
                       <div className="flex-1">

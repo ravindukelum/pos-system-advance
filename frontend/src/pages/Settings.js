@@ -4,7 +4,6 @@ import {
   BuildingStorefrontIcon, 
   PhoneIcon, 
   MapPinIcon,
-  ShieldCheckIcon,
   CurrencyDollarIcon,
   DocumentTextIcon,
   CheckCircleIcon
@@ -24,8 +23,7 @@ const Settings = () => {
     taxRate: '',
     currency: 'USD',
     countryCode: '+94',
-    warrantyPeriod: '30',
-    warrantyTerms: 'Standard warranty terms apply. Items must be returned in original condition.',
+
     receiptFooter: 'Thank you for your business!',
     businessRegistration: '',
     taxId: ''
@@ -58,8 +56,7 @@ const Settings = () => {
           taxRate: settingsData.taxRate?.toString() || '',
           currency: settingsData.currency || 'USD',
           countryCode: settingsData.countryCode || '+94',
-          warrantyPeriod: settingsData.warrantyPeriod?.toString() || '30',
-          warrantyTerms: settingsData.warrantyTerms || 'Standard warranty terms apply. Items must be returned in original condition.',
+
           receiptFooter: settingsData.receiptFooter || 'Thank you for your business!',
           businessRegistration: settingsData.businessRegistration || '',
           taxId: settingsData.taxId || ''
@@ -89,8 +86,7 @@ const Settings = () => {
       // Convert string values back to appropriate types for backend
       const settingsToSave = {
         ...settings,
-        taxRate: parseFloat(settings.taxRate) || 0,
-        warrantyPeriod: parseInt(settings.warrantyPeriod) || 30
+        taxRate: parseFloat(settings.taxRate) || 0
       };
       await settingsAPI.updateSettings(settingsToSave);
       setMessage('Settings saved successfully!');
@@ -377,44 +373,7 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Warranty Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center mb-4">
-            <ShieldCheckIcon className="h-6 w-6 text-blue-600 mr-2" />
-            <h2 className="text-xl font-semibold text-gray-900">Warranty Settings</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Default Warranty Period (days)
-              </label>
-              <input
-                type="number"
-                name="warrantyPeriod"
-                value={settings.warrantyPeriod}
-                onChange={handleInputChange}
-                min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="30"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Warranty Terms
-              </label>
-              <textarea
-                name="warrantyTerms"
-                value={settings.warrantyTerms}
-                onChange={handleInputChange}
-                rows="3"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter warranty terms and conditions"
-              />
-            </div>
-          </div>
-        </div>
+
 
         {/* Receipt Settings */}
         <div className="bg-white p-6 rounded-lg shadow-md">

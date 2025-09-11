@@ -12,6 +12,7 @@ import Investments from './pages/Investments';
 import Inventory from './pages/Inventory';
 import Sales from './pages/Sales';
 import Customers from './pages/Customers';
+import Locations from './pages/Locations';
 import Users from './pages/Users';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
@@ -74,6 +75,13 @@ function App() {
                 <ProtectedRoute roles={['admin', 'manager', 'cashier']}>
                   <Layout>
                     <Customers />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/locations" element={
+                <ProtectedRoute roles={['admin', 'manager']}>
+                  <Layout>
+                    <Locations />
                   </Layout>
                 </ProtectedRoute>
               } />

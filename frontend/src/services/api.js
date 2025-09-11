@@ -96,7 +96,10 @@ export const investmentsAPI = {
 
 // Inventory API
 export const inventoryAPI = {
-  getAll: () => api.get('/inventory'),
+  getAll: (locationId = null) => {
+    const url = locationId ? `/inventory?location_id=${locationId}` : '/inventory';
+    return api.get(url);
+  },
   getById: (id) => api.get(`/inventory/${id}`),
   getBySku: (sku) => api.get(`/inventory/sku/${sku}`),
   search: (query) => api.get(`/inventory/search?q=${encodeURIComponent(query)}`),
@@ -104,6 +107,11 @@ export const inventoryAPI = {
   update: (id, data) => api.put(`/inventory/${id}`, data),
   updateQuantity: (id, data) => api.patch(`/inventory/${id}/quantity`, data),
   delete: (id) => api.delete(`/inventory/${id}`),
+  // Location-based inventory endpoints
+  getLocations: () => api.get('/locations'),
+  getItemLocations: (itemId) => api.get(`/inventory/${itemId}/locations`),
+  updateLocationQuantity: (itemId, locationId, data) => api.patch(`/inventory/${itemId}/location/${locationId}/quantity`, data),
+  transferBetweenLocations: (data) => api.post('/inventory/transfer', data),
 };
 
 // Sales API
@@ -126,6 +134,10 @@ export const dashboardAPI = {
   getSalesAnalytics: (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
     return api.get(`/dashboard/sales-analytics?${queryString}`);
+  },
+  getLocationSales: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/dashboard/location-sales?${queryString}`);
   },
   getTopSellingItems: (limit = 10) => api.get(`/dashboard/top-selling-items?limit=${limit}`),
   getLowStockAlerts: (threshold = 5) => api.get(`/dashboard/low-stock-alerts?threshold=${threshold}`),
@@ -176,6 +188,21 @@ export const paymentsAPI = {
     const queryString = new URLSearchParams(params).toString();
     return api.get(`/payments/analytics?${queryString}`);
   },
+};
+
+// Locations API
+export const locationsAPI = {
+  getAll: () => api.get('/locations'),
+  getById: (id) => api.get(`/locations/${id}`),
+  create: (data) => api.post('/locations', data),
+  update: (id, data) => api.put(`/locations/${id}`, data),
+  delete: (id) => api.delete(`/locations/${id}`),
+  getInventory: (id) => api.get(`/locations/${id}/inventory`),
+  getSales: (id, params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/locations/${id}/sales?${queryString}`);
+  },
+  transferInventory: (fromId, toId, data) => api.post(`/locations/${fromId}/transfer/${toId}`, data),
 };
 
 // Reports API

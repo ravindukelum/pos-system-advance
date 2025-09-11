@@ -27,8 +27,7 @@ const PrintInvoice = ({ sale, onClose }) => {
           shopEmail: '',
           shopAddress: '',
           currency: 'RS',
-          warrantyPeriod: 30,
-          warrantyTerms: 'Standard warranty terms apply.',
+
           receiptFooter: 'Thank you for your business!'
         });
         setSaleDetails(sale);
@@ -209,11 +208,39 @@ const PrintInvoice = ({ sale, onClose }) => {
           }
           
           .logo {
-            max-height: 64px;
-            max-width: 128px;
+            max-height: 200px;
+            max-width: 300px;
             object-fit: contain;
-            margin: 0 auto;
-            display: block;
+            float: right;
+            margin-left: 20px;
+          }
+          
+          .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            min-height: 100px;
+            padding: 10px 0;
+          }
+          
+          .company-info {
+            flex: 1;
+            text-align: left;
+            padding-right: 20px;
+          }
+          
+          .logo-container {
+            flex-shrink: 0;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+          }
+          
+          .invoice-title {
+            text-align: center;
+            margin: 20px 0;
           }
           
           @media print {
@@ -237,25 +264,31 @@ const PrintInvoice = ({ sale, onClose }) => {
           
           <div class="content">
             <!-- Header -->
-            <div class="text-center mb-4">
-              <h1 class="text-xl font-bold mb-2">INVOICE</h1>
-              ${settings?.shopLogoUrl ? 
-                `<div class="mb-2">
-                  <img src="${settings.shopLogoUrl}" alt="Shop Logo" class="logo" />
-                </div>` : ''
-              }
-              <h2 class="text-lg font-bold">${settings?.shopName || 'SMALL POS SYSTEM'}</h2>
-              ${settings?.shopPhone ? `<p class="text-xs">Phone: ${settings.shopPhone}</p>` : ''}
-              ${settings?.shopEmail ? `<p class="text-xs">Email: ${settings.shopEmail}</p>` : ''}
-              ${settings?.shopAddress ? `<p class="text-xs">${settings.shopAddress}</p>` : ''}
-              ${(settings?.shopCity || settings?.shopState) ? 
-                `<p class="text-xs">
-                  ${settings.shopCity || ''}${settings.shopCity && settings.shopState ? ', ' : ''}${settings.shopState || ''}
-                </p>` : ''
-              }
-              <p class="text-sm mt-1">Point of Sale Receipt</p>
-              <div class="dashed-line my-2"></div>
+            <div class="header-container">
+              <div class="company-info">
+                <h2 class="text-lg font-bold mb-1">${settings?.shopName || 'SMALL POS SYSTEM'}</h2>
+                ${settings?.shopPhone ? `<p class="text-xs">Phone: ${settings.shopPhone}</p>` : ''}
+                ${settings?.shopEmail ? `<p class="text-xs">Email: ${settings.shopEmail}</p>` : ''}
+                ${settings?.shopAddress ? `<p class="text-xs">${settings.shopAddress}</p>` : ''}
+                ${(settings?.shopCity || settings?.shopState) ? 
+                  `<p class="text-xs">
+                    ${settings.shopCity || ''}${settings.shopCity && settings.shopState ? ', ' : ''}${settings.shopState || ''}
+                  </p>` : ''
+                }
+              </div>
+              <div class="logo-container">
+                ${settings?.shopLogoUrl ? 
+                  `<img src="${settings.shopLogoUrl}" alt="Shop Logo" class="logo" />` : ''
+                }
+              </div>
             </div>
+            
+            <div class="invoice-title">
+              <h1 class="text-xl font-bold">INVOICE</h1>
+              <p class="text-sm mt-1">Point of Sale Receipt</p>
+            </div>
+            
+            <div class="dashed-line my-2"></div>
 
             <!-- Invoice Details -->
             <div class="mb-4 text-sm">
@@ -353,13 +386,8 @@ const PrintInvoice = ({ sale, onClose }) => {
             <div class="text-center text-xs">
               <p>${settings?.receiptFooter || 'Thank you for your business!'}</p>
               <p>Status: ${sale.status.toUpperCase()}</p>
-              ${settings?.warrantyPeriod ? `
-                <div class="mt-2">
-                  <p>Warranty: ${settings.warrantyPeriod} days</p>
-                  ${settings.warrantyTerms ? `<p class="text-xs mt-1">${settings.warrantyTerms}</p>` : ''}
-                </div>
-              ` : ''}
-              <p class="mt-2">Powered by ${settings?.shopName || 'Small POS System'}</p>
+
+              <p class="mt-2">Powered by Gray Solution</p>
             </div>
           </div>
         </div>
@@ -421,38 +449,44 @@ const PrintInvoice = ({ sale, onClose }) => {
               
               <div className="content">
                 {/* Header */}
-                <div className="text-center mb-4">
-                  <h1 className="text-xl font-bold mb-2">INVOICE</h1>
-                {settings?.shopLogoUrl && (
-                  <div className="mb-2">
-                    <img 
-                      src={settings.shopLogoUrl} 
-                      alt="Shop Logo" 
-                      className="mx-auto max-h-16 max-w-32 object-contain"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
+                <div className="flex justify-between items-center mb-4 min-h-24 py-2">
+                  <div className="flex-1 text-left pr-5">
+                    <h2 className="text-lg font-bold mb-1">{settings?.shopName || 'SMALL POS SYSTEM'}</h2>
+                    {settings?.shopPhone && (
+                      <p className="text-xs">Phone: {settings.shopPhone}</p>
+                    )}
+                    {settings?.shopEmail && (
+                      <p className="text-xs">Email: {settings.shopEmail}</p>
+                    )}
+                    {settings?.shopAddress && (
+                      <p className="text-xs">{settings.shopAddress}</p>
+                    )}
+                    {(settings?.shopCity || settings?.shopState) && (
+                      <p className="text-xs">
+                        {settings.shopCity}{settings.shopCity && settings.shopState ? ', ' : ''}{settings.shopState}
+                      </p>
+                    )}
                   </div>
-                )}
-                <h2 className="text-lg font-bold">{settings?.shopName || 'SMALL POS SYSTEM'}</h2>
-                {settings?.shopPhone && (
-                  <p className="text-xs">Phone: {settings.shopPhone}</p>
-                )}
-                {settings?.shopEmail && (
-                  <p className="text-xs">Email: {settings.shopEmail}</p>
-                )}
-                {settings?.shopAddress && (
-                  <p className="text-xs">{settings.shopAddress}</p>
-                )}
-                {(settings?.shopCity || settings?.shopState) && (
-                  <p className="text-xs">
-                    {settings.shopCity}{settings.shopCity && settings.shopState ? ', ' : ''}{settings.shopState}
-                  </p>
-                )}
-                <p className="text-sm mt-1">Point of Sale Receipt</p>
+                  <div className="flex-shrink-0 text-right flex items-center justify-end">
+                    {settings?.shopLogoUrl && (
+                      <img 
+                        src={settings.shopLogoUrl} 
+                        alt="Shop Logo" 
+                        className="max-h-36 max-w-60 object-contain ml-5"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+                
+                <div className="text-center mb-4">
+                  <h1 className="text-xl font-bold">INVOICE</h1>
+                  <p className="text-sm mt-1">Point of Sale Receipt</p>
+                </div>
+                
                 <div className="dashed-line border-b border-dashed border-gray-400 my-2"></div>
-              </div>
 
               {/* Invoice Details */}
               <div className="mb-4 text-sm">
@@ -562,15 +596,8 @@ const PrintInvoice = ({ sale, onClose }) => {
               <div className="text-center text-xs text-gray-600">
                 <p>{settings?.receiptFooter || 'Thank you for your business!'}</p>
                 <p>Status: {sale.status.toUpperCase()}</p>
-                {settings?.warrantyPeriod && (
-                  <div className="mt-2">
-                    <p>Warranty: {settings.warrantyPeriod} days</p>
-                    {settings.warrantyTerms && (
-                      <p className="text-xs mt-1">{settings.warrantyTerms}</p>
-                    )}
-                  </div>
-                )}
-                <p className="mt-2">Powered by {settings?.shopName || 'Small POS System'}</p>
+
+                <p className="mt-2">Powered by Gray Solution</p>
               </div>
               </div>
             </div>

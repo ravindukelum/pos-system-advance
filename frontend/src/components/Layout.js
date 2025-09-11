@@ -13,6 +13,7 @@ import {
   MoonIcon,
   ArrowRightOnRectangleIcon,
   UserIcon,
+  BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,6 +25,7 @@ const navigation = [
   { name: 'Inventory', href: '/inventory', icon: CubeIcon, roles: ['admin', 'manager'] },
   { name: 'Sales', href: '/sales', icon: ShoppingCartIcon, roles: ['admin', 'manager', 'cashier'] },
   { name: 'Customers', href: '/customers', icon: UsersIcon, roles: ['admin', 'manager', 'cashier'] },
+  { name: 'Locations', href: '/locations', icon: BuildingOfficeIcon, roles: ['admin', 'manager'] },
   { name: 'Users', href: '/users', icon: UsersIcon, roles: ['admin'] },
   { name: 'Payments', href: '/payments', icon: CurrencyDollarIcon, roles: ['admin', 'manager', 'cashier'] },
   { name: 'Reports', href: '/reports', icon: CogIcon, roles: ['admin', 'manager'] },

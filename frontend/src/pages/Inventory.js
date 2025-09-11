@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+
 import { 
   PlusIcon, 
   MagnifyingGlassIcon, 
@@ -10,12 +11,14 @@ import {
   XMarkIcon,
   CheckIcon,
   EyeIcon,
-  QrCodeIcon
+  QrCodeIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline';
 import { inventoryAPI, barcodesAPI } from '../services/api';
 import AdvancedBarcodeScanner from '../components/AdvancedBarcodeScanner';
 
 const Inventory = () => {
+
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -32,6 +35,15 @@ const Inventory = () => {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showSearchBarcodeScanner, setShowSearchBarcodeScanner] = useState(false);
   
+  // Location-related state
+  const [locations, setLocations] = useState([]);
+  
+
+  const [selectedLocation, setSelectedLocation] = useState('all');
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [selectedItemForLocation, setSelectedItemForLocation] = useState(null);
+  const [itemLocations, setItemLocations] = useState([]);
+  
   const [formData, setFormData] = useState({
     item_name: '',
     sku: '',
@@ -45,14 +57,30 @@ const Inventory = () => {
     barcode: '',
     warranty_days: ''
   });
+  const [locationQuantities, setLocationQuantities] = useState({});
 
   useEffect(() => {
+    fetchLocations();
     fetchInventory();
   }, []);
 
+  useEffect(() => {
+    fetchInventory();
+  }, [selectedLocation]);
+
+  const fetchLocations = async () => {
+    try {
+      const response = await inventoryAPI.getLocations();
+      setLocations(response.data.locations);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+    }
+  };
+
   const fetchInventory = async () => {
     try {
-      const response = await inventoryAPI.getAll();
+      const locationId = selectedLocation === 'all' ? null : selectedLocation;
+      const response = await inventoryAPI.getAll(locationId);
       setInventory(response.data.inventory);
     } catch (error) {
       console.error('Error fetching inventory:', error);
@@ -61,22 +89,108 @@ const Inventory = () => {
     }
   };
 
+  const fetchItemLocations = async (itemId) => {
+    try {
+      const response = await inventoryAPI.getItemLocations(itemId);
+      setItemLocations(response.data.locations);
+    } catch (error) {
+      console.error('Error fetching item locations:', error);
+    }
+  };
+
+  const handleLocationQuantityUpdate = async (itemId, locationId, operation, quantity) => {
+    try {
+      await inventoryAPI.updateLocationQuantity(itemId, locationId, { operation, quantity });
+      fetchInventory();
+      fetchItemLocations(itemId);
+      alert('Location quantity updated successfully!');
+    } catch (error) {
+      console.error('Error updating location quantity:', error);
+      alert('Error updating location quantity: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleViewItemLocations = (item) => {
+    setSelectedItemForLocation(item);
+    fetchItemLocations(item.id);
+    setShowLocationModal(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const submitData = {
-        ...formData,
-        buy_price: parseFloat(formData.buy_price),
-        sell_price: parseFloat(formData.sell_price),
-        quantity: parseInt(formData.quantity),
-        min_stock: parseInt(formData.min_stock || 0),
-        warranty_days: parseInt(formData.warranty_days || 0)
-      };
-
+      let submitData;
+      
       if (editingItem) {
+        // For editing, update basic item info and location quantities
+        const totalQuantity = Object.values(locationQuantities).reduce((sum, qty) => sum + (parseInt(qty) || 0), 0);
+        
+        if (totalQuantity === 0) {
+          alert('Please set at least one location quantity greater than 0');
+          return;
+        }
+        
+        submitData = {
+          ...formData,
+          buy_price: parseFloat(formData.buy_price),
+          sell_price: parseFloat(formData.sell_price),
+          quantity: totalQuantity,
+          min_stock: parseInt(formData.min_stock || 0),
+          warranty_days: parseInt(formData.warranty_days || 0)
+        };
+        
+        // Update basic item information
         await inventoryAPI.update(editingItem.id, submitData);
+        
+        // Update location quantities
+        const currentLocations = await inventoryAPI.getItemLocations(editingItem.id);
+        const currentLocationQtys = {};
+        currentLocations.data.locations.forEach(loc => {
+          currentLocationQtys[loc.location_id] = loc.quantity;
+        });
+        
+        // Update each location quantity
+        for (const [locationId, newQty] of Object.entries(locationQuantities)) {
+          const newQuantity = parseInt(newQty) || 0;
+          const currentQty = currentLocationQtys[locationId] || 0;
+          
+          if (newQuantity !== currentQty) {
+            await inventoryAPI.updateLocationQuantity(editingItem.id, locationId, {
+              operation: 'set',
+              quantity: newQuantity
+            });
+          }
+        }
+        
+        // Set quantities to 0 for locations not in the form but have current quantities
+        for (const [locationId, currentQty] of Object.entries(currentLocationQtys)) {
+          if (!locationQuantities[locationId] && currentQty > 0) {
+            await inventoryAPI.updateLocationQuantity(editingItem.id, locationId, {
+              operation: 'set',
+              quantity: 0
+            });
+          }
+        }
+        
         alert('Item updated successfully!');
       } else {
+        // For new items, validate location quantities
+        const totalQuantity = Object.values(locationQuantities).reduce((sum, qty) => sum + (parseInt(qty) || 0), 0);
+        
+        if (totalQuantity === 0) {
+          alert('Please set at least one location quantity greater than 0');
+          return;
+        }
+        
+        submitData = {
+          ...formData,
+          buy_price: parseFloat(formData.buy_price),
+          sell_price: parseFloat(formData.sell_price),
+          quantity: totalQuantity,
+          min_stock: parseInt(formData.min_stock || 0),
+          warranty_days: parseInt(formData.warranty_days || 0),
+          locationQuantities: locationQuantities
+        };
         await inventoryAPI.create(submitData);
         alert('Item created successfully!');
       }
@@ -90,7 +204,7 @@ const Inventory = () => {
     }
   };
 
-  const handleEdit = (item) => {
+  const handleEdit = async (item) => {
     setEditingItem(item);
     setFormData({
       item_name: item.item_name,
@@ -105,6 +219,22 @@ const Inventory = () => {
       barcode: item.barcode || '',
       warranty_days: (item.warranty_days || 0).toString()
     });
+    
+    // Fetch location quantities for editing
+    try {
+      const response = await inventoryAPI.getItemLocations(item.id);
+      const locationQtys = {};
+      response.data.locations.forEach(location => {
+        if (location.quantity > 0) {
+          locationQtys[location.location_id] = location.quantity.toString();
+        }
+      });
+      setLocationQuantities(locationQtys);
+    } catch (error) {
+      console.error('Error fetching location quantities:', error);
+      setLocationQuantities({});
+    }
+    
     setShowModal(true);
   };
 
@@ -175,6 +305,7 @@ const Inventory = () => {
       barcode: '',
       warranty_days: ''
     });
+    setLocationQuantities({});
     setEditingItem(null);
     setShowModal(false);
   };
@@ -454,6 +585,17 @@ const Inventory = () => {
           <option value="low">Low Stock</option>
           <option value="out">Out of Stock</option>
         </select>
+        
+        <select
+          value={selectedLocation}
+          onChange={(e) => setSelectedLocation(e.target.value)}
+          className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-w-0 sm:min-w-[150px]"
+        >
+          <option value="all">All Locations</option>
+          {locations.map(location => (
+            <option key={location.id} value={location.id}>{location.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Inventory Table - Desktop */}
@@ -538,9 +680,33 @@ const Inventory = () => {
                   {item.category || '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900 dark:text-white">{item.quantity}</div>
-                  {item.min_stock && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Min: {item.min_stock}</div>
+                  <div className="text-sm text-gray-900 dark:text-white">
+                    {selectedLocation !== 'all' ? (
+                      <>
+                        {item.location_quantity || 0}
+                        <span className="ml-1 text-xs text-green-600 dark:text-green-400">
+                          at {item.location_name}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {item.total_quantity || item.quantity}
+                        {item.locations_count > 0 && (
+                          <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
+                            ({item.locations_count} locations)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {selectedLocation !== 'all' ? (
+                    item.location_min_stock && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Min: {item.location_min_stock}</div>
+                    )
+                  ) : (
+                    item.min_stock && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Min: {item.min_stock}</div>
+                    )
                   )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
@@ -638,6 +804,13 @@ const Inventory = () => {
                      <EyeIcon className="h-5 w-5" />
                    </button>
                    <button
+                     onClick={() => handleViewItemLocations(item)}
+                     className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                     title="View Locations"
+                   >
+                     <MapPinIcon className="h-5 w-5" />
+                   </button>
+                   <button
                      onClick={() => handleEdit(item)}
                      className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                      title="Edit Item"
@@ -664,7 +837,23 @@ const Inventory = () => {
                  <div>
                    <div className="text-sm text-gray-600 dark:text-gray-400">Stock</div>
                    <div className="text-lg font-medium text-gray-700 dark:text-gray-300">
-                     {item.quantity}
+                     {selectedLocation !== 'all' ? (
+                       <>
+                         {item.location_quantity || 0}
+                         <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                           at {item.location_name}
+                         </div>
+                       </>
+                     ) : (
+                       <>
+                         {item.total_quantity || item.quantity}
+                         {item.locations_count > 0 && (
+                           <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                             {item.locations_count} locations
+                           </div>
+                         )}
+                       </>
+                     )}
                    </div>
                  </div>
                  <div className="col-span-2 sm:col-span-1">
@@ -680,8 +869,8 @@ const Inventory = () => {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-2 sm:p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-700 w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-700 w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 {editingItem ? 'Edit Item' : 'Add New Item'}
               </h2>
@@ -776,18 +965,39 @@ const Inventory = () => {
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Quantity *
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    {editingItem ? 'Update Quantities by Location *' : 'Set Quantities by Location *'}
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
+                  <div className="space-y-3 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+                     {locations.length === 0 ? (
+                       <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                         No locations found. Please add locations first.
+                       </div>
+                     ) : (
+                       locations.map((location) => (
+                         <div key={location.id} className="flex items-center justify-between">
+                           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                             {location.name}
+                           </span>
+                           <input
+                             type="number"
+                             min="0"
+                             value={locationQuantities[location.id] || ''}
+                             onChange={(e) => setLocationQuantities({
+                               ...locationQuantities,
+                               [location.id]: e.target.value
+                             })}
+                             className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                             placeholder="0"
+                           />
+                         </div>
+                       ))
+                     )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Total: {Object.values(locationQuantities).reduce((sum, qty) => sum + (parseInt(qty) || 0), 0)} items
+                  </p>
                 </div>
                 
                 <div>
@@ -984,6 +1194,105 @@ const Inventory = () => {
                     Edit Item
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Location Modal */}
+      {showLocationModal && selectedItemForLocation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-700 w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Location Inventory - {selectedItemForLocation.item_name}
+              </h2>
+              <button
+                onClick={() => setShowLocationModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              <div className="space-y-4">
+                {itemLocations.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+                    No location inventory found for this item.
+                  </p>
+                ) : (
+                  <div className="grid gap-4">
+                    {itemLocations.map((location) => (
+                      <div key={location.location_id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {location.location_name}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Current Stock: {location.quantity}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            placeholder="Quantity"
+                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            id={`qty-${location.location_id}`}
+                          />
+                          <button
+                            onClick={() => {
+                              const qty = document.getElementById(`qty-${location.location_id}`).value;
+                              if (qty && qty > 0) {
+                                handleLocationQuantityUpdate(selectedItemForLocation.id, location.location_id, 'add', parseInt(qty));
+                                document.getElementById(`qty-${location.location_id}`).value = '';
+                              }
+                            }}
+                            className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                          >
+                            Add
+                          </button>
+                          <button
+                            onClick={() => {
+                              const qty = document.getElementById(`qty-${location.location_id}`).value;
+                              if (qty && qty > 0) {
+                                handleLocationQuantityUpdate(selectedItemForLocation.id, location.location_id, 'subtract', parseInt(qty));
+                                document.getElementById(`qty-${location.location_id}`).value = '';
+                              }
+                            }}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            onClick={() => {
+                              const qty = document.getElementById(`qty-${location.location_id}`).value;
+                              if (qty && qty >= 0) {
+                                handleLocationQuantityUpdate(selectedItemForLocation.id, location.location_id, 'set', parseInt(qty));
+                                document.getElementById(`qty-${location.location_id}`).value = '';
+                              }
+                            }}
+                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            Set
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2 pt-4 mt-6 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setShowLocationModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
