@@ -1,5 +1,5 @@
 const express = require('express');
-const twilio = require('twilio');
+const axios = require('axios');
 const Database = require('../database/db');
 const { authenticateToken } = require('../middleware/auth');
 const messageTemplates = require('../templates/whatsapp-templates');
@@ -31,15 +31,19 @@ const executeQuery = async (sql, params = []) => {
   return await dbInstance.executeQuery(sql, params);
 };
 
-// Initialize Twilio client (will be configured when credentials are provided)
-let twilioClient = null;
+// WhatsApp Business Cloud API configuration
+let whatsappConfig = null;
 
-const initializeTwilio = () => {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
+const initializeWhatsApp = () => {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   
-  if (accountSid && authToken) {
-    twilioClient = twilio(accountSid, authToken);
+  if (accessToken && phoneNumberId) {
+    whatsappConfig = {
+      accessToken,
+      phoneNumberId,
+      apiUrl: `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`
+    };
     return true;
   }
   return false;
@@ -93,25 +97,40 @@ router.post('/whatsapp/send', authenticateToken, async (req, res) => {
     // Format phone number for WhatsApp
     const formattedPhone = formatPhoneNumber(phone);
     
-    // Send message via Twilio
-    const messageResponse = await client.messages.create({
-      body: message,
-      from: process.env.TWILIO_WHATSAPP_FROM,
-      to: `whatsapp:${formattedPhone}`
+    // Initialize WhatsApp if not already done
+    if (!whatsappConfig && !initializeWhatsApp()) {
+      return res.status(500).json({ error: 'WhatsApp API not configured' });
+    }
+
+    // Send message via WhatsApp Business Cloud API
+    const messageData = {
+      messaging_product: 'whatsapp',
+      to: formattedPhone,
+      type: 'text',
+      text: {
+        body: message
+      }
+    };
+
+    const messageResponse = await axios.post(whatsappConfig.apiUrl, messageData, {
+      headers: {
+        'Authorization': `Bearer ${whatsappConfig.accessToken}`,
+        'Content-Type': 'application/json'
+      }
     });
     
     // Log message to database
     const logSql = `
-      INSERT INTO message_logs (recipient_phone, message_type, message_content, status, twilio_sid, sale_id, customer_id, sent_by)
+      INSERT INTO message_logs (recipient_phone, message_type, message_content, status, whatsapp_message_id, sale_id, customer_id, sent_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    
+
     await executeQuery(logSql, [
       formattedPhone,
       messageType,
       message,
       'sent',
-      messageResponse.sid,
+      messageResponse.data.messages[0].id,
       saleId || null,
       customerId || null,
       req.user.id
@@ -119,11 +138,28 @@ router.post('/whatsapp/send', authenticateToken, async (req, res) => {
     
     res.json({
       success: true,
-      messageSid: messageResponse.sid,
-      status: messageResponse.status
+      messageId: messageResponse.data.messages[0].id,
+      status: 'sent'
     });
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
+    
+    // Extract detailed error information
+    let errorMessage = error.message;
+    let statusCode = 500;
+    
+    if (error.response) {
+      // WhatsApp API returned an error response
+      console.error('WhatsApp API Error Response:', {
+        status: error.response.status,
+        data: error.response.data
+      });
+      
+      errorMessage = error.response.data?.error?.message || 
+                    error.response.data?.message || 
+                    `WhatsApp API Error: ${error.response.status}`;
+      statusCode = error.response.status;
+    }
     
     // Log failed message
     if (req.body.phone) {
@@ -138,7 +174,7 @@ router.post('/whatsapp/send', authenticateToken, async (req, res) => {
           req.body.messageType || 'custom',
           req.body.message || '',
           'failed',
-          error.message,
+          errorMessage,
           req.body.saleId || null,
           req.body.customerId || null,
           req.user.id
@@ -148,7 +184,11 @@ router.post('/whatsapp/send', authenticateToken, async (req, res) => {
       }
     }
     
-    res.status(500).json({ error: 'Failed to send message', details: error.message });
+    res.status(statusCode).json({ 
+      error: 'Failed to send message', 
+      details: errorMessage,
+      whatsappError: error.response?.data
+    });
   }
 });
 
@@ -178,16 +218,31 @@ router.post('/whatsapp/send-template', authenticateToken, async (req, res) => {
      const message = messageTemplates[templateName](enhancedTemplateData);
      const formattedPhone = formatPhoneNumber(phone);
      
-     // Send message via Twilio
-     const messageResponse = await client.messages.create({
-       body: message,
-       from: process.env.TWILIO_WHATSAPP_FROM,
-       to: `whatsapp:${formattedPhone}`
+     // Initialize WhatsApp if not already done
+     if (!whatsappConfig && !initializeWhatsApp()) {
+       return res.status(500).json({ error: 'WhatsApp API not configured' });
+     }
+
+     // Send message via WhatsApp Business Cloud API
+     const messageData = {
+       messaging_product: 'whatsapp',
+       to: formattedPhone,
+       type: 'text',
+       text: {
+         body: message
+       }
+     };
+
+     const messageResponse = await axios.post(whatsappConfig.apiUrl, messageData, {
+       headers: {
+         'Authorization': `Bearer ${whatsappConfig.accessToken}`,
+         'Content-Type': 'application/json'
+       }
      });
      
      // Log message to database
      const logSql = `
-       INSERT INTO message_logs (recipient_phone, message_type, template_name, message_content, status, twilio_sid, sale_id, customer_id, sent_by)
+       INSERT INTO message_logs (recipient_phone, message_type, template_name, message_content, status, whatsapp_message_id, sale_id, customer_id, sent_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      `;
      
@@ -197,7 +252,7 @@ router.post('/whatsapp/send-template', authenticateToken, async (req, res) => {
        templateName,
        message,
        'sent',
-       messageResponse.sid,
+       messageResponse.data.messages[0].id,
        saleId || null,
        customerId || null,
        req.user.id
@@ -205,8 +260,8 @@ router.post('/whatsapp/send-template', authenticateToken, async (req, res) => {
      
      res.json({
        success: true,
-       messageSid: messageResponse.sid,
-       status: messageResponse.status,
+       messageId: messageResponse.data.messages[0].id,
+       status: 'sent',
        template: templateName
      });
   } catch (error) {
@@ -301,15 +356,31 @@ router.post('/whatsapp/order-confirmation', authenticateToken, async (req, res) 
      const message = messageTemplates.orderConfirmation(templateData);
      const formattedPhone = formatPhoneNumber(sale.customer_phone);
      
-     const messageResponse = await client.messages.create({
-       body: message,
-       from: process.env.TWILIO_WHATSAPP_FROM,
-       to: `whatsapp:${formattedPhone}`
+     // Initialize WhatsApp if not already done
+     if (!whatsappConfig && !initializeWhatsApp()) {
+       return res.status(500).json({ error: 'WhatsApp API not configured' });
+     }
+
+     // Send message via WhatsApp Business Cloud API
+     const messageData = {
+       messaging_product: 'whatsapp',
+       to: formattedPhone,
+       type: 'text',
+       text: {
+         body: message
+       }
+     };
+
+     const messageResponse = await axios.post(whatsappConfig.apiUrl, messageData, {
+       headers: {
+         'Authorization': `Bearer ${whatsappConfig.accessToken}`,
+         'Content-Type': 'application/json'
+       }
      });
      
      // Log message to database
      const logSql = `
-       INSERT INTO message_logs (recipient_phone, message_type, template_name, message_content, status, twilio_sid, sale_id, customer_id, sent_by)
+       INSERT INTO message_logs (recipient_phone, message_type, template_name, message_content, status, whatsapp_message_id, sale_id, customer_id, sent_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      `;
      
@@ -319,7 +390,7 @@ router.post('/whatsapp/order-confirmation', authenticateToken, async (req, res) 
        'orderConfirmation',
        message,
        'sent',
-       messageResponse.sid,
+       messageResponse.data.messages[0].id,
        saleId,
        sale.customer_id,
        req.user.id
@@ -327,8 +398,8 @@ router.post('/whatsapp/order-confirmation', authenticateToken, async (req, res) 
      
      res.json({
        success: true,
-       messageSid: messageResponse.sid,
-       status: messageResponse.status
+       messageId: messageResponse.data.messages[0].id,
+       status: 'sent'
      });
   } catch (error) {
      console.error('Error sending order confirmation:', error);
@@ -363,6 +434,18 @@ router.post('/whatsapp/order-confirmation', authenticateToken, async (req, res) 
 router.get('/templates', authenticateToken, (req, res) => {
   const templates = Object.keys(messageTemplates).map(key => ({
     name: key,
+    description: getTemplateDescription(key)
+  }));
+  
+  res.json({ templates });
+});
+
+// Get WhatsApp message templates (alias for frontend compatibility)
+router.get('/whatsapp/templates', authenticateToken, (req, res) => {
+  const templates = Object.keys(messageTemplates).map((key, index) => ({
+    id: index + 1,
+    name: key,
+    content: getTemplateDescription(key),
     description: getTemplateDescription(key)
   }));
   
@@ -409,30 +492,220 @@ router.get('/logs', authenticateToken, async (req, res) => {
   }
 });
 
-// Test Twilio configuration
+// Get WhatsApp message history (alias for frontend compatibility)
+router.get('/whatsapp/messages', authenticateToken, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status, templateName } = req.query;
+    const offset = (page - 1) * limit;
+    
+    let sql = 'SELECT * FROM message_logs WHERE 1=1';
+    const params = [];
+    
+    if (status) {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    
+    if (templateName) {
+      sql += ' AND template_name = ?';
+      params.push(templateName);
+    }
+    
+    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
+    
+    const result = await executeQuery(sql, params);
+    const logs = result.rows || result;
+    
+    res.json({
+      success: true,
+      messages: logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: logs.length
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching message history:', error);
+    res.status(500).json({ error: 'Failed to fetch message history' });
+  }
+});
+
+// WhatsApp webhook endpoint for receiving events
+router.get('/whatsapp/webhook', (req, res) => {
+  // Webhook verification
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  
+  // Check if a token and mode were sent
+  if (mode && token) {
+    // Check the mode and token sent are correct
+    if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+      // Respond with 200 OK and challenge token from the request
+      console.log('✅ WhatsApp webhook verified successfully');
+      res.status(200).send(challenge);
+    } else {
+      // Respond with '403 Forbidden' if verify tokens do not match
+      console.log('❌ WhatsApp webhook verification failed');
+      res.sendStatus(403);
+    }
+  } else {
+    res.sendStatus(400);
+  }
+});
+
+// WhatsApp webhook endpoint for receiving events
+router.post('/whatsapp/webhook', async (req, res) => {
+  try {
+    const body = req.body;
+    
+    // Check if this is a WhatsApp status update
+    if (body.object === 'whatsapp_business_account') {
+      body.entry.forEach(async (entry) => {
+        const changes = entry.changes;
+        
+        changes.forEach(async (change) => {
+          if (change.field === 'messages') {
+            const value = change.value;
+            
+            // Handle message status updates
+            if (value.statuses) {
+              for (const status of value.statuses) {
+                await handleMessageStatus(status);
+              }
+            }
+            
+            // Handle incoming messages (if needed)
+            if (value.messages) {
+              for (const message of value.messages) {
+                await handleIncomingMessage(message);
+              }
+            }
+          }
+        });
+      });
+    }
+    
+    res.status(200).send('EVENT_RECEIVED');
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    res.status(500).send('Error processing webhook');
+  }
+});
+
+// Handle message status updates
+const handleMessageStatus = async (status) => {
+  try {
+    const messageId = status.id;
+    const newStatus = status.status; // delivered, read, failed, etc.
+    const timestamp = status.timestamp;
+    
+    // Update message status in database
+    const updateSql = `
+      UPDATE message_logs 
+      SET status = ?, updated_at = FROM_UNIXTIME(?)
+      WHERE whatsapp_message_id = ?
+    `;
+    
+    await executeQuery(updateSql, [newStatus, timestamp, messageId]);
+    console.log(`📱 Updated message ${messageId} status to: ${newStatus}`);
+  } catch (error) {
+    console.error('Error updating message status:', error);
+  }
+};
+
+// Handle incoming messages (optional - for future use)
+const handleIncomingMessage = async (message) => {
+  try {
+    console.log('📨 Received incoming message:', message);
+    // You can implement auto-replies or message logging here
+  } catch (error) {
+    console.error('Error handling incoming message:', error);
+  }
+};
+
+// Test WhatsApp Business Cloud API configuration
 router.get('/test-config', authenticateToken, (req, res) => {
-  const hasCredentials = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
-  const hasWhatsAppNumber = !!process.env.TWILIO_WHATSAPP_NUMBER;
+  const hasAccessToken = !!process.env.WHATSAPP_ACCESS_TOKEN;
+  const hasPhoneNumberId = !!process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const hasBusinessAccountId = !!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  const hasWebhookToken = !!process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+  const configured = hasAccessToken && hasPhoneNumberId;
   
   res.json({
-    configured: hasCredentials,
-    hasWhatsAppNumber: hasWhatsAppNumber,
-    sandboxNumber: hasWhatsAppNumber ? null : 'whatsapp:+14155238886',
-    message: hasCredentials ? 
-      'Twilio is configured and ready to use' : 
-      'Please configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in environment variables'
+    configured: configured,
+    status: configured ? 'Connected' : 'Disconnected',
+    hasAccessToken: hasAccessToken,
+    hasPhoneNumberId: hasPhoneNumberId,
+    hasBusinessAccountId: hasBusinessAccountId,
+    hasWebhookToken: hasWebhookToken,
+    webhookUrl: `${req.protocol}://${req.get('host')}/api/notifications/whatsapp/webhook`,
+    message: configured ? 
+      'WhatsApp Business Cloud API is configured and ready to use' : 
+      'Please configure WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in environment variables'
   });
 });
 
 function getTemplateDescription(templateName) {
-  const descriptions = {
-    orderConfirmation: 'Sent when a new order is placed',
-    paymentReminder: 'Sent to remind customers about pending payments',
-    orderReady: 'Sent when an order is ready for pickup',
-    lowStock: 'Sent to staff when inventory is low'
+  const sampleData = {
+    orderConfirmation: {
+      customerName: 'John Doe',
+      invoice: 'INV-001',
+      totalAmount: '25.50',
+      items: [{ name: 'Coffee', quantity: 2, total: '10.00' }],
+      shopName: 'Your Shop',
+      shopAddress: 'Main Street'
+    },
+    paymentReminder: {
+      customerName: 'John Doe',
+      invoice: 'INV-001',
+      totalAmount: '25.50',
+      dueAmount: '15.00',
+      shopName: 'Your Shop'
+    },
+    lowStockAlert: {
+      itemName: 'Coffee Beans',
+      currentStock: 5,
+      minStock: 20,
+      shopName: 'Your Shop'
+    },
+    welcomeMessage: {
+      customerName: 'John Doe',
+      shopName: 'Your Shop',
+      loyaltyPoints: 100
+    },
+    promotional: {
+      customerName: 'John Doe',
+      offerTitle: '20% Off Weekend Sale',
+      offerDetails: 'Get 20% off on all items this weekend!',
+      validUntil: '2024-01-31',
+      shopName: 'Your Shop'
+    },
+    custom: {
+      customerName: 'John Doe',
+      message: 'Thank you for your business!',
+      shopName: 'Your Shop'
+    },
+    orderReady: {
+      invoice: 'INV-001',
+      customerName: 'John Doe',
+      shopName: 'Your Shop',
+      shopAddress: 'Main Street'
+    },
+    birthdayWish: {
+      customerName: 'John Doe',
+      shopName: 'Your Shop',
+      specialOffer: '20% off on your birthday!'
+    }
   };
   
-  return descriptions[templateName] || 'Custom template';
+  if (messageTemplates[templateName] && sampleData[templateName]) {
+    return messageTemplates[templateName](sampleData[templateName]);
+  }
+  
+  return 'Custom template';
 }
 
 module.exports = router;

@@ -264,7 +264,8 @@ class Database {
           description TEXT,
           barcode VARCHAR(255),
           warranty_days INTEGER DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       ` : `
         CREATE TABLE IF NOT EXISTS inventory (
@@ -281,7 +282,8 @@ class Database {
           description TEXT,
           barcode VARCHAR(255),
           warranty_days INT DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `;
 
@@ -296,13 +298,14 @@ class Database {
           customer_id INTEGER,
           customer_name VARCHAR(255),
           customer_phone VARCHAR(50),
-          location_id INTEGER,
           total_amount DECIMAL(10,2) NOT NULL,
           paid_amount DECIMAL(10,2) DEFAULT 0,
           tax_amount DECIMAL(10,2) DEFAULT 0,
           discount_amount DECIMAL(10,2) DEFAULT 0,
           status VARCHAR(20) DEFAULT 'unpaid',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          subtotal DECIMAL(10,2) DEFAULT 0,
+          location_id INTEGER
         )
       ` : `
         CREATE TABLE IF NOT EXISTS sales (
@@ -312,13 +315,14 @@ class Database {
           customer_id INT,
           customer_name VARCHAR(255),
           customer_phone VARCHAR(50),
-          location_id INT,
           total_amount DECIMAL(10,2) NOT NULL,
           paid_amount DECIMAL(10,2) DEFAULT 0,
           tax_amount DECIMAL(10,2) DEFAULT 0,
           discount_amount DECIMAL(10,2) DEFAULT 0,
           status VARCHAR(20) DEFAULT 'unpaid',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          subtotal DECIMAL(10,2) DEFAULT 0,
+          location_id INT
         )
       `;
 
@@ -334,7 +338,8 @@ class Database {
           quantity INTEGER NOT NULL,
           unit_price DECIMAL(10,2) NOT NULL,
           line_total DECIMAL(10,2) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          sku VARCHAR(100)
         )
       ` : `
         CREATE TABLE IF NOT EXISTS sales_items (
@@ -346,6 +351,7 @@ class Database {
           unit_price DECIMAL(10,2) NOT NULL,
           line_total DECIMAL(10,2) NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          sku VARCHAR(100),
           FOREIGN KEY (sale_id) REFERENCES sales(id),
           FOREIGN KEY (item_id) REFERENCES inventory(id)
         )
@@ -411,7 +417,8 @@ class Database {
           tax_rate DECIMAL(5,2) DEFAULT 0.00,
           currency VARCHAR(10) DEFAULT 'USD',
           country_code VARCHAR(10) DEFAULT '+1',
-
+          warranty_period INTEGER DEFAULT 30,
+          warranty_terms TEXT,
           receipt_footer TEXT,
           business_registration VARCHAR(100),
           tax_id VARCHAR(50),
@@ -432,7 +439,8 @@ class Database {
           tax_rate DECIMAL(5,2) DEFAULT 0.00,
           currency VARCHAR(10) DEFAULT 'USD',
           country_code VARCHAR(10) DEFAULT '+1',
-
+          warranty_period INT DEFAULT 30,
+          warranty_terms TEXT,
           receipt_footer TEXT,
           business_registration VARCHAR(100),
           tax_id VARCHAR(50),
@@ -576,7 +584,7 @@ class Database {
           template_name VARCHAR(100),
           message_content TEXT NOT NULL,
           status VARCHAR(20) DEFAULT 'pending',
-          twilio_sid VARCHAR(100),
+          whatsapp_message_id VARCHAR(100),
           error_message TEXT,
           sale_id INTEGER,
           customer_id INTEGER,
@@ -595,7 +603,7 @@ class Database {
           template_name VARCHAR(100),
           message_content TEXT NOT NULL,
           status VARCHAR(20) DEFAULT 'pending',
-          twilio_sid VARCHAR(100),
+          whatsapp_message_id VARCHAR(100),
           error_message TEXT,
           sale_id INT,
           customer_id INT,
@@ -610,9 +618,6 @@ class Database {
       
       await this.executeQuery(createMessageLogsTable);
 
-      // Run migrations to update existing tables
-      await this.runMigrations();
-
       // Insert default data
       await this.insertDefaultData();
 
@@ -623,208 +628,7 @@ class Database {
     }
   }
 
-  async runMigrations() {
-    try {
-      console.log('Running database migrations...');
-      
-      // Migration: Add missing columns to customers table
-      const customerMigrations = [
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS date_of_birth DATE',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(10)',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_points INT DEFAULT 0',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_spent DECIMAL(12,2) DEFAULT 0.00',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS discount_percentage DECIMAL(5,2) DEFAULT 0.00',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT',
-        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT \'active\''
-      ];
 
-      // Migration: Add missing columns to sales table
-      const salesMigrations = [
-        'ALTER TABLE sales ADD COLUMN IF NOT EXISTS subtotal DECIMAL(10,2) DEFAULT 0.00'
-      ];
-
-      // Migration: Add missing columns to sales_items table
-      const salesItemsMigrations = [
-        'ALTER TABLE sales_items ADD COLUMN IF NOT EXISTS sku VARCHAR(100)'
-      ];
-
-      // Migration: Add missing columns to inventory table
-      const inventoryMigrations = [
-        'ALTER TABLE inventory ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
-      ];
-
-      // Migration: Add missing columns to settings table
-      const settingsMigrations = [
-        'ALTER TABLE settings ADD COLUMN IF NOT EXISTS shop_logo_url VARCHAR(500) DEFAULT \'\'\''
-      ];
-
-      // For MySQL, we need to check column existence before adding
-      if (!isPostgreSQL) {
-        // Helper function to check if column exists
-        const columnExists = async (tableName, columnName) => {
-          try {
-            const result = await this.executeQuery(
-              `SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
-              [tableName, columnName]
-            );
-            return result[0].count > 0;
-          } catch (error) {
-            return false;
-          }
-        };
-
-        // MySQL migrations with existence checks
-        const mysqlMigrations = [
-          { table: 'customers', column: 'address', sql: 'ALTER TABLE customers ADD COLUMN address TEXT' },
-          { table: 'customers', column: 'date_of_birth', sql: 'ALTER TABLE customers ADD COLUMN date_of_birth DATE' },
-          { table: 'customers', column: 'gender', sql: 'ALTER TABLE customers ADD COLUMN gender ENUM(\'male\', \'female\', \'other\')' },
-          { table: 'customers', column: 'loyalty_points', sql: 'ALTER TABLE customers ADD COLUMN loyalty_points INT DEFAULT 0' },
-          { table: 'customers', column: 'total_spent', sql: 'ALTER TABLE customers ADD COLUMN total_spent DECIMAL(12,2) DEFAULT 0.00' },
-          { table: 'customers', column: 'discount_percentage', sql: 'ALTER TABLE customers ADD COLUMN discount_percentage DECIMAL(5,2) DEFAULT 0.00' },
-          { table: 'customers', column: 'notes', sql: 'ALTER TABLE customers ADD COLUMN notes TEXT' },
-          { table: 'customers', column: 'status', sql: 'ALTER TABLE customers ADD COLUMN status ENUM(\'active\', \'inactive\') DEFAULT \'active\'' },
-          { table: 'sales', column: 'subtotal', sql: 'ALTER TABLE sales ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0.00' },
-          { table: 'sales', column: 'location_id', sql: 'ALTER TABLE sales ADD COLUMN location_id INT' },
-          { table: 'sales_items', column: 'sku', sql: 'ALTER TABLE sales_items ADD COLUMN sku VARCHAR(100)' },
-          { table: 'inventory', column: 'updated_at', sql: 'ALTER TABLE inventory ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP' },
-          { table: 'settings', column: 'shop_logo_url', sql: "ALTER TABLE settings ADD COLUMN shop_logo_url VARCHAR(500) DEFAULT ''" }
-        ];
-
-        for (const migration of mysqlMigrations) {
-          try {
-            const exists = await columnExists(migration.table, migration.column);
-            if (!exists) {
-              await this.executeQuery(migration.sql);
-              console.log(`Added column ${migration.column} to ${migration.table}`);
-            }
-          } catch (err) {
-            console.log(`Migration skipped for ${migration.table}.${migration.column}:`, err.message);
-          }
-        }
-      } else {
-        for (const migration of customerMigrations) {
-          try {
-            await this.executeQuery(migration);
-          } catch (err) {
-            // Ignore duplicate column errors
-            if (!err.message.includes('already exists')) {
-              console.log('Migration info:', err.message);
-            }
-          }
-        }
-        
-        for (const migration of salesMigrations) {
-          try {
-            await this.executeQuery(migration);
-          } catch (err) {
-            // Ignore duplicate column errors
-            if (!err.message.includes('already exists')) {
-              console.log('Migration info:', err.message);
-            }
-          }
-        }
-        
-        for (const migration of salesItemsMigrations) {
-          try {
-            await this.executeQuery(migration);
-          } catch (err) {
-            // Ignore duplicate column errors
-            if (!err.message.includes('already exists')) {
-              console.log('Migration info:', err.message);
-            }
-          }
-        }
-        
-        for (const migration of inventoryMigrations) {
-          try {
-            await this.executeQuery(migration);
-          } catch (err) {
-            // Ignore duplicate column errors
-            if (!err.message.includes('already exists')) {
-              console.log('Migration info:', err.message);
-            }
-          }
-        }
-        
-        for (const migration of settingsMigrations) {
-          try {
-            await this.executeQuery(migration);
-          } catch (err) {
-            // Ignore duplicate column errors
-            if (!err.message.includes('already exists')) {
-              console.log('Migration info:', err.message);
-            }
-          }
-        }
-      }
-
-      // Foreign key constraint updates for cascade delete (MySQL only)
-      if (!isPostgreSQL) {
-        const foreignKeyUpdates = [
-          {
-            name: 'sales_items_sale_id_cascade',
-            update: async () => {
-              try {
-                // Drop existing foreign key (using known constraint name)
-                await this.executeQuery('ALTER TABLE sales_items DROP FOREIGN KEY sales_items_ibfk_1');
-                console.log('Dropped existing sales_items foreign key constraint');
-              } catch (err) {
-                console.log('Foreign key sales_items_ibfk_1 may not exist:', err.message);
-              }
-              
-              try {
-                // Add new foreign key with cascade
-                await this.executeQuery(
-                  'ALTER TABLE sales_items ADD CONSTRAINT fk_sales_items_sale_id FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE'
-                );
-                console.log('Added CASCADE DELETE constraint for sales_items');
-              } catch (err) {
-                console.log('Failed to add CASCADE constraint for sales_items:', err.message);
-              }
-            }
-          },
-          {
-            name: 'payments_sale_id_cascade',
-            update: async () => {
-              try {
-                // Drop existing foreign key (using known constraint name)
-                await this.executeQuery('ALTER TABLE payments DROP FOREIGN KEY payments_ibfk_1');
-                console.log('Dropped existing payments foreign key constraint');
-              } catch (err) {
-                console.log('Foreign key payments_ibfk_1 may not exist:', err.message);
-              }
-              
-              try {
-                // Add new foreign key with cascade
-                await this.executeQuery(
-                  'ALTER TABLE payments ADD CONSTRAINT fk_payments_sale_id FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE'
-                );
-                console.log('Added CASCADE DELETE constraint for payments');
-              } catch (err) {
-                console.log('Failed to add CASCADE constraint for payments:', err.message);
-              }
-            }
-          }
-        ];
-
-        // Apply foreign key updates
-        for (const fkUpdate of foreignKeyUpdates) {
-          try {
-            await fkUpdate.update();
-            console.log(`Processed foreign key constraint: ${fkUpdate.name}`);
-          } catch (err) {
-            console.log(`Foreign key update failed for ${fkUpdate.name}:`, err.message);
-          }
-        }
-      }
-
-      console.log('Database migrations completed successfully');
-    } catch (error) {
-      console.error('Error running migrations:', error);
-      // Don't throw error to prevent initialization failure
-    }
-  }
 
   async insertDefaultData() {
     try {
@@ -1053,11 +857,11 @@ class Database {
         `;
 
         await this.executeQuery(insertSalesItemsSQL, [
-          7, 10, 'Wireless Mouse', 2, 24.99, 49.98,
-          7, 11, 'Bluetooth Keyboard', 1, 69.99, 69.99,
-          8, 12, 'USB-C Cable', 1, 14.99, 14.99,
-          9, 13, 'Laptop Stand', 1, 49.99, 49.99,
-          7, 12, 'USB-C Cable', 1, 14.99, 14.99
+          1, 1, 'Wireless Mouse', 2, 24.99, 49.98,
+          1, 2, 'Bluetooth Keyboard', 1, 69.99, 69.99,
+          2, 3, 'USB-C Cable', 1, 14.99, 14.99,
+          3, 4, 'Laptop Stand', 1, 49.99, 49.99,
+          1, 3, 'USB-C Cable', 1, 14.99, 14.99
         ]);
       }
 

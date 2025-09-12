@@ -173,6 +173,76 @@ export const settingsAPI = {
   updateSettings: (data) => api.put('/settings', data),
 };
 
+// WhatsApp API
+export const whatsappAPI = {
+  // Send a text message
+  sendMessage: (data) => {
+    // Use phone number as provided without automatic formatting
+    const phone = data.to || data.phone;
+    
+    // Map frontend fields to backend expected fields
+    const payload = {
+      phone: phone,
+      message: data.message,
+      messageType: data.type || 'custom'
+    };
+    
+    return api.post('/notifications/whatsapp/send', payload);
+  },
+  
+  // Send a template message
+  sendTemplate: (data) => api.post('/notifications/whatsapp/send-template', data),
+  
+  // Get message status
+  getMessageStatus: (messageId) => api.get(`/notifications/whatsapp/message-status/${messageId}`),
+  
+  // Get message history
+  getMessageHistory: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/notifications/whatsapp/messages?${queryString}`);
+  },
+  
+  // Get webhook events
+  getWebhookEvents: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/notifications/whatsapp/webhook-events?${queryString}`);
+  },
+  
+  // Get WhatsApp configuration status
+  getStatus: () => api.get('/notifications/test-config'),
+  
+  // Send bulk messages
+  sendBulkMessages: (data) => {
+    // Format phone numbers with Sri Lankan country code if needed
+    const formattedRecipients = data.recipients.map(phone => {
+      if (phone && !phone.startsWith('+')) {
+        // Remove leading zero and add +94 for Sri Lankan numbers
+        return phone.startsWith('0') ? '+94' + phone.substring(1) : '+94' + phone;
+      }
+      return phone;
+    });
+    
+    const payload = {
+      ...data,
+      recipients: formattedRecipients
+    };
+    
+    return api.post('/notifications/whatsapp/send-bulk', payload);
+  },
+  
+  // Get message templates
+  getTemplates: () => api.get('/notifications/whatsapp/templates'),
+  
+  // Create message template
+  createTemplate: (data) => api.post('/notifications/whatsapp/templates', data),
+  
+  // Update message template
+  updateTemplate: (id, data) => api.put(`/notifications/whatsapp/templates/${id}`, data),
+  
+  // Delete message template
+  deleteTemplate: (id) => api.delete(`/notifications/whatsapp/templates/${id}`),
+};
+
 // Payments API
 export const paymentsAPI = {
   process: (data) => api.post('/payments/process', data),

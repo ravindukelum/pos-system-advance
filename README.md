@@ -9,8 +9,26 @@ A modern, full-featured Point of Sale system built with React and Node.js, desig
 
 ## 🚀 Live Demo
 
-- **Frontend**: http://localhost:3001
+- **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
+
+## 📁 Project Structure
+
+```
+qorder/
+├── docs/                    # Documentation files
+│   ├── BARCODE_SUPPORT.md
+│   ├── CPANEL_DEPLOYMENT_GUIDE.md
+│   ├── DATABASE_README.md
+│   └── QUICK_SETUP.md
+├── scripts/                 # Deployment and database scripts
+│   ├── database_schema.sql
+│   ├── deploy.bat
+│   └── deploy.sh
+├── backend/                 # Node.js API server
+├── frontend/                # React application
+└── package.json            # Root package configuration
+```
 
 ## ✨ Features
 
