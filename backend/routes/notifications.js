@@ -249,11 +249,13 @@ router.post('/whatsapp/order-confirmation', authenticateToken, async (req, res) 
       return res.status(400).json({ error: 'Sale ID is required' });
     }
     
-    // Get sale details
+    // Get sale details with location information
     const saleSql = `
-      SELECT s.*, c.name as customer_name, c.phone as customer_phone
+      SELECT s.*, c.name as customer_name, c.phone as customer_phone,
+             l.name as location_name, l.address as location_address
       FROM sales s
       LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN locations l ON s.location_id = l.id
       WHERE s.id = ?
     `;
     
@@ -291,7 +293,8 @@ router.post('/whatsapp/order-confirmation', authenticateToken, async (req, res) 
       orderNumber: sale.invoice,
       items: items,
       total: parseFloat(sale.total_amount).toFixed(2),
-      shopName: shopSettings.shop_name
+      shopName: shopSettings.shop_name,
+      shopAddress: sale.location_address || shopSettings.shop_address || 'Main Store'
     };
     
     // Generate and send message

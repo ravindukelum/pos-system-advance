@@ -3,8 +3,8 @@
 const messageTemplates = {
   // Order confirmation template
   orderConfirmation: (orderData) => {
-    const { invoice, customerName, totalAmount, items, shopName } = orderData;
-    return `🛍️ *Order Confirmation - ${shopName}*\n\nHi ${customerName}!\n\nThank you for your purchase!\n\n📋 *Order Details:*\nInvoice: ${invoice}\nTotal: $${totalAmount}\n\n📦 *Items:*\n${items.map(item => `• ${item.name} x${item.quantity} - $${item.total}`).join('\n')}\n\nWe appreciate your business! 🙏`;
+    const { invoice, customerName, totalAmount, items, shopName, shopAddress } = orderData;
+    return `🛍️ *Order Confirmation - ${shopName}*\n\nHi ${customerName}!\n\nThank you for your purchase!\n\n📋 *Order Details:*\nInvoice: ${invoice}\nTotal: $${totalAmount}\n\n📦 *Items:*\n${items.map(item => `• ${item.name} x${item.quantity} - $${item.total}`).join('\n')}\n\n📍 *Store Information:*\n• Location: ${shopAddress}\n\nWe appreciate your business! 🙏`;
   },
 
   // Payment reminder template
