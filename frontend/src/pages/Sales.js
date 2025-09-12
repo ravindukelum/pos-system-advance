@@ -280,6 +280,7 @@ const Sales = () => {
     
     // Get detailed sale items from backend
     let itemsText = '';
+    let locationInfo = '';
     try {
       const saleResponse = await salesAPI.getById(sale.id);
       const saleDetails = saleResponse.data.sale;
@@ -294,9 +295,20 @@ const Sales = () => {
       } else {
         itemsText = 'Items details not available';
       }
+      
+      // Set location information from sale details
+      if (saleDetails.location_name) {
+        locationInfo = saleDetails.location_name;
+        if (saleDetails.location_address) {
+          locationInfo += `\n• Address: ${saleDetails.location_address}`;
+        }
+      } else {
+        locationInfo = 'Main Store';
+      }
     } catch (error) {
       console.error('Error fetching sale details for WhatsApp:', error);
       itemsText = 'Items details not available';
+      locationInfo = 'Main Store';
     }
     
     const message = `🧾 *${settings?.shopName || 'Your Shop'}*\n` +
@@ -319,7 +331,7 @@ const Sales = () => {
       `• Balance: ${currencySymbol}${(sale.total_amount - sale.paid_amount).toFixed(2)}\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `🏪 *Store Information:*\n` +
-      `• Location: ${sale.location || 'Main Store'}\n` +
+      `• Location: ${locationInfo}\n` +
       `• Support: ${settings?.phone || 'Contact us for support'}\n\n` +
       `Thank you for choosing *${settings?.shopName || 'Your Shop'}*! 🙏\n` +
       `We appreciate your business and look forward to serving you again.\n\n` +

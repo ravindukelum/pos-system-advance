@@ -76,7 +76,12 @@ router.get('/status/:status', async (req, res) => {
 // Get sale by ID with all items
 router.get('/:id', async (req, res) => {
   try {
-    const saleSql = 'SELECT * FROM sales WHERE id = ?';
+    const saleSql = `
+      SELECT s.*, l.name as location_name, l.address as location_address 
+      FROM sales s 
+      LEFT JOIN locations l ON s.location_id = l.id 
+      WHERE s.id = ?
+    `;
     const itemsSql = `
       SELECT si.*, i.warranty_days 
       FROM sales_items si 
