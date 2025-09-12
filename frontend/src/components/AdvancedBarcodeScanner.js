@@ -164,17 +164,17 @@ const AdvancedBarcodeScanner = ({ onScan, onClose, isOpen }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-start justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-auto mt-4">
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-start justify-center z-[60]">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-auto mt-4">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Scan Barcode</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Scan Barcode</h2>
           <button
             onClick={() => {
               stopScanner();
               onClose();
             }}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-300 dark:hover:text-gray-100"
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
@@ -183,13 +183,13 @@ const AdvancedBarcodeScanner = ({ onScan, onClose, isOpen }) => {
         {/* Camera Selection */}
         {cameras.length > 1 && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Select Camera:
             </label>
             <select
               value={selectedCamera?.deviceId || ''}
               onChange={(e) => handleCameraChange(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             >
               {cameras.map((camera) => (
                 <option key={camera.deviceId} value={camera.deviceId}>

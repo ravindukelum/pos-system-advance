@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import MuiThemeProvider from './contexts/MuiThemeProvider';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -23,7 +24,8 @@ import './App.css';
 function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
+      <MuiThemeProvider>
+        <AuthProvider>
         <Router
           future={{
             v7_startTransition: true,
@@ -141,7 +143,8 @@ function App() {
             />
           </div>
         </Router>
-      </AuthProvider>
+        </AuthProvider>
+      </MuiThemeProvider>
     </ThemeProvider>
   );
 }

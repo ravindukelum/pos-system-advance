@@ -14,8 +14,9 @@ import {
   QrCodeIcon,
   MapPinIcon
 } from '@heroicons/react/24/outline';
-import { inventoryAPI, barcodesAPI } from '../services/api';
+import { inventoryAPI, barcodesAPI, partnersAPI, settingsAPI } from '../services/api';
 import AdvancedBarcodeScanner from '../components/AdvancedBarcodeScanner';
+import { getCurrencySymbol, formatCurrency } from '../utils/currency';
 
 const Inventory = () => {
 
@@ -37,12 +38,15 @@ const Inventory = () => {
   
   // Location-related state
   const [locations, setLocations] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   
 
   const [selectedLocation, setSelectedLocation] = useState('all');
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [selectedItemForLocation, setSelectedItemForLocation] = useState(null);
   const [itemLocations, setItemLocations] = useState([]);
+  const [viewingItemLocations, setViewingItemLocations] = useState([]);
+  const [settings, setSettings] = useState(null);
   
   const [formData, setFormData] = useState({
     item_name: '',
@@ -62,6 +66,8 @@ const Inventory = () => {
   useEffect(() => {
     fetchLocations();
     fetchInventory();
+    fetchSuppliers();
+    fetchSettings();
   }, []);
 
   useEffect(() => {
@@ -86,6 +92,25 @@ const Inventory = () => {
       console.error('Error fetching inventory:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await partnersAPI.getAll();
+      const supplierPartners = response.data.partners.filter(partner => partner.type === 'supplier');
+      setSuppliers(supplierPartners);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const response = await settingsAPI.getSettings();
+      setSettings(response.data.settings);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
     }
   };
 
@@ -238,8 +263,15 @@ const Inventory = () => {
     setShowModal(true);
   };
 
-  const handleView = (item) => {
+  const handleView = async (item) => {
     setViewingItem(item);
+    try {
+      const response = await inventoryAPI.getItemLocations(item.id);
+      setViewingItemLocations(response.data.locations || []);
+    } catch (error) {
+      console.error('Error fetching item locations:', error);
+      setViewingItemLocations([]);
+    }
     setShowViewModal(true);
   };
 
@@ -511,7 +543,7 @@ const Inventory = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Total Value</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">RS {getTotalValue().toFixed(2)}</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(getTotalValue(), settings?.currency || 'LKR', 2)}</p>
             </div>
             <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
               <div className="w-6 h-6 bg-green-600 dark:bg-green-400 rounded"></div>
@@ -600,11 +632,11 @@ const Inventory = () => {
 
       {/* Inventory Table - Desktop */}
       <div className="hidden lg:block bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="w-full">
+          <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left">
+                <th className="w-8 px-2 py-2 text-left">
                   <input
                     type="checkbox"
                     checked={selectedItems.length === filteredInventory.length && filteredInventory.length > 0}
@@ -613,49 +645,49 @@ const Inventory = () => {
                 />
               </th>
               <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="w-1/4 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                 onClick={() => handleSort('item_name')}
               >
                 Item Name {getSortIcon('item_name')}
               </th>
               <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="w-16 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                 onClick={() => handleSort('sku')}
               >
                 SKU {getSortIcon('sku')}
               </th>
               <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                 onClick={() => handleSort('category')}
               >
                 Category {getSortIcon('category')}
               </th>
               <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                 onClick={() => handleSort('quantity')}
               >
                 Stock {getSortIcon('quantity')}
               </th>
               <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="w-20 px-2 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                 onClick={() => handleSort('buy_price')}
               >
-                Buy Price {getSortIcon('buy_price')}
+                Buy {getSortIcon('buy_price')}
               </th>
               <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className="w-20 px-2 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                 onClick={() => handleSort('sell_price')}
               >
-                Sell Price {getSortIcon('sell_price')}
+                Sell {getSortIcon('sell_price')}
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+              <th className="w-16 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+              <th className="w-20 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredInventory.map((item) => (
               <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="w-8 px-2 py-2 text-left">
                   <input
                     type="checkbox"
                     checked={selectedItems.includes(item.id)}
@@ -663,83 +695,76 @@ const Inventory = () => {
                     className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500 bg-white dark:bg-gray-800"
                   />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="w-1/4 px-2 py-2 text-left">
                   <div>
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">{item.item_name}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={item.item_name}>{item.item_name}</div>
                     {item.description && (
-                      <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs" title={item.description}>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate" title={item.description}>
                         {item.description}
                       </div>
                     )}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                <td className="w-16 px-2 py-2 text-xs text-gray-900 dark:text-white truncate text-left" title={item.sku}>
                   {item.sku}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                <td className="w-20 px-2 py-2 text-xs text-gray-500 dark:text-gray-400 truncate text-left" title={item.category || '-'}>
                   {item.category || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900 dark:text-white">
+                <td className="w-20 px-2 py-2 text-left">
+                  <div className="text-xs text-gray-900 dark:text-white">
                     {selectedLocation !== 'all' ? (
                       <>
                         {item.location_quantity || 0}
-                        <span className="ml-1 text-xs text-green-600 dark:text-green-400">
-                          at {item.location_name}
-                        </span>
+                        <div className="text-xs text-green-600 dark:text-green-400 truncate">
+                          {item.location_name}
+                        </div>
                       </>
                     ) : (
                       <>
                         {item.total_quantity || item.quantity}
                         {item.locations_count > 0 && (
-                          <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
-                            ({item.locations_count} locations)
-                          </span>
+                          <div className="text-xs text-blue-600 dark:text-blue-400">
+                            ({item.locations_count})
+                          </div>
                         )}
                       </>
                     )}
                   </div>
-                  {selectedLocation !== 'all' ? (
-                    item.location_min_stock && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Min: {item.location_min_stock}</div>
-                    )
-                  ) : (
-                    item.min_stock && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Min: {item.min_stock}</div>
-                    )
-                  )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  RS {parseFloat(item.buy_price).toFixed(2)}
+                <td className="w-20 px-2 py-2 text-xs text-gray-900 dark:text-white text-right">
+                  {formatCurrency(item.buy_price, settings?.currency || 'LKR', 2)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  RS {parseFloat(item.sell_price).toFixed(2)}
+                <td className="w-20 px-2 py-2 text-xs text-gray-900 dark:text-white text-right">
+                  {formatCurrency(item.sell_price, settings?.currency || 'LKR', 2)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="w-16 px-2 py-2 text-left">
                   {getStockStatusBadge(item)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <button
-                    onClick={() => handleView(item)}
-                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                    title="View Details"
-                  >
-                    <EyeIcon className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
-                    title="Edit Item"
-                  >
-                    <PencilIcon className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                    title="Delete Item"
-                  >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
+                <td className="w-20 px-2 py-2 text-sm font-medium text-left">
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={() => handleView(item)}
+                      className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                      title="View Details"
+                    >
+                      <EyeIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                      title="Edit Item"
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                      title="Delete Item"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -831,7 +856,7 @@ const Inventory = () => {
                  <div>
                    <div className="text-sm text-gray-600 dark:text-gray-400">Price</div>
                    <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                     RS {parseFloat(item.sell_price).toFixed(2)}
+                     {formatCurrency(item.sell_price, settings?.currency || 'LKR', 2)}
                    </div>
                  </div>
                  <div>
@@ -868,7 +893,7 @@ const Inventory = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-2 sm:p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-start justify-center p-2 sm:p-4 z-50 pt-4 sm:pt-8">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-700 w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -927,12 +952,18 @@ const Inventory = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Supplier
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.supplier}
                     onChange={(e) => setFormData({...formData, supplier: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
+                  >
+                    <option value="">Select a supplier</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.name}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 
                 <div>
@@ -1088,8 +1119,8 @@ const Inventory = () => {
       {/* View Modal */}
       {showViewModal && viewingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-2 sm:p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-700 w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl dark:shadow-gray-700 w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Item Details</h2>
               <button
                 onClick={() => setShowViewModal(false)}
@@ -1098,7 +1129,7 @@ const Inventory = () => {
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0" style={{scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch'}}>
 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1124,17 +1155,17 @@ const Inventory = () => {
                 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Buy Price</label>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-white">RS {parseFloat(viewingItem.buy_price).toFixed(2)}</p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{formatCurrency(viewingItem.buy_price, settings?.currency || 'LKR', 2)}</p>
                   </div>
                 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sell Price</label>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-white">RS {parseFloat(viewingItem.sell_price).toFixed(2)}</p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{formatCurrency(viewingItem.sell_price, settings?.currency || 'LKR', 2)}</p>
                   </div>
                 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Current Stock</label>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{viewingItem.quantity}</p>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Total Stock</label>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{viewingItem.total_quantity || viewingItem.quantity}</p>
                   </div>
                 
                   <div>
@@ -1157,7 +1188,7 @@ const Inventory = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Profit Margin</label>
                     <p className="mt-1 text-sm text-gray-900 dark:text-white">
-                      RS {((viewingItem.sell_price || 0) - (viewingItem.buy_price || 0)).toFixed(2)} 
+                      {formatCurrency((viewingItem.sell_price || 0) - (viewingItem.buy_price || 0), settings?.currency || 'LKR', 2)} 
                       ({((((viewingItem.sell_price || 0) - (viewingItem.buy_price || 0)) / (viewingItem.buy_price || 1)) * 100).toFixed(1)}%)
                     </p>
                   </div>
@@ -1177,7 +1208,45 @@ const Inventory = () => {
                   )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                {/* Location Stock Breakdown */}
+                {viewingItemLocations.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Stock by Location</h3>
+                    <div className="grid gap-3">
+                      {viewingItemLocations.map((location) => (
+                        <div key={location.location_id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-medium text-gray-900 dark:text-white">{location.location_name}</h4>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Min: {location.min_stock} | Max: {location.max_stock}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                {location.quantity}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">units</p>
+                            </div>
+                          </div>
+                          {location.quantity <= location.min_stock && location.quantity > 0 && (
+                            <div className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                              ⚠️ Low stock at this location
+                            </div>
+                          )}
+                          {location.quantity === 0 && (
+                            <div className="mt-2 text-xs text-red-600 dark:text-red-400">
+                              ❌ Out of stock at this location
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-gray-200 dark:border-gray-700 mt-4 flex-shrink-0">
                   <button
                     onClick={() => setShowViewModal(false)}
                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -1194,7 +1263,6 @@ const Inventory = () => {
                     Edit Item
                   </button>
                 </div>
-              </div>
             </div>
           </div>
         </div>

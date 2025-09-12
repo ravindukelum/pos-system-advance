@@ -336,21 +336,29 @@ const Users = () => {
 
   // Statistics cards
   const StatCard = ({ title, value, icon: Icon, color = 'primary' }) => (
-    <Card>
-      <CardContent>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box>
-            <Typography variant="h4" color={color}>
-              {value || 0}
-            </Typography>
-            <Typography variant="subtitle2" color="textSecondary">
-              {title}
-            </Typography>
-          </Box>
-          <Avatar sx={{ bgcolor: `${color}.main` }}>
-            <Icon />
-          </Avatar>
+    <Card sx={{ height: '100%' }}>
+      <CardContent sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        height: '100%',
+        minHeight: '120px'
+      }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <Typography variant="h4" color={color} sx={{ fontWeight: 'bold', mb: 1 }}>
+            {value || 0}
+          </Typography>
+          <Typography variant="subtitle2" color="textSecondary">
+            {title}
+          </Typography>
         </Box>
+        <Avatar sx={{ 
+          bgcolor: `${color}.main`,
+          width: 100,
+          height: 56
+        }}>
+          <Icon sx={{ fontSize: 28 }} />
+        </Avatar>
       </CardContent>
     </Card>
   );
@@ -437,7 +445,7 @@ const Users = () => {
             Filters
           </Typography>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
                 label="Search"
@@ -453,13 +461,14 @@ const Users = () => {
                 placeholder="Name, email, username..."
               />
             </Grid>
-            <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth sx={{ height: '56px' }}>
                 <InputLabel>Role</InputLabel>
                 <Select
                   value={filters.role}
                   onChange={(e) => handleFilterChange('role', e.target.value)}
                   label="Role"
+                  sx={{ height: '56px' }}
                 >
                   <MenuItem value="">All Roles</MenuItem>
                   <MenuItem value="admin">Admin</MenuItem>
@@ -469,13 +478,14 @@ const Users = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth sx={{ height: '56px' }}>
                 <InputLabel>Status</InputLabel>
                 <Select
                   value={filters.status}
                   onChange={(e) => handleFilterChange('status', e.target.value)}
                   label="Status"
+                  sx={{ height: '56px' }}
                 >
                   <MenuItem value="">All Status</MenuItem>
                   <MenuItem value="active">Active</MenuItem>
@@ -484,12 +494,17 @@ const Users = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} sm={6} md={3}>
               <Button
                 fullWidth
                 variant="outlined"
                 onClick={() => setFilters({ search: '', role: '', status: '', isLocked: '' })}
-                sx={{ height: '56px' }}
+                sx={{ 
+                  height: '56px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
               >
                 Clear Filters
               </Button>

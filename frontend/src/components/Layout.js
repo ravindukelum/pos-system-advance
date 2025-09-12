@@ -40,6 +40,7 @@ function classNames(...classes) {
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
   const location = useLocation();
   const { isDarkMode, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
@@ -106,14 +107,30 @@ export default function Layout({ children }) {
       </div>
 
       {/* Static sidebar for desktop */}
-      <div className="hidden md:flex md:flex-shrink-0">
-        <div className="flex flex-col w-64">
+      <div className={classNames(
+        "hidden md:flex md:flex-shrink-0 transition-all duration-300",
+        desktopSidebarCollapsed ? "w-16" : "w-64"
+      )}>
+        <div className="flex flex-col w-full">
           <div className="flex flex-col h-0 flex-1 border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
             <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-              <div className="flex items-center flex-shrink-0 px-4">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">POS System</h1>
+              <div className={classNames(
+                "flex items-center flex-shrink-0",
+                desktopSidebarCollapsed ? "px-2 justify-center" : "px-4"
+              )}>
+                {!desktopSidebarCollapsed && (
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">POS System</h1>
+                )}
+                {desktopSidebarCollapsed && (
+                  <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">P</span>
+                  </div>
+                )}
               </div>
-              <nav className="mt-5 flex-1 px-2 bg-white dark:bg-gray-800 space-y-1">
+              <nav className={classNames(
+                "mt-5 flex-1 bg-white dark:bg-gray-800 space-y-1",
+                desktopSidebarCollapsed ? "px-2" : "px-2"
+              )}>
                 {filteredNavigation.map((item) => {
                   const isActive = location.pathname === item.href || 
                     (item.href === '/dashboard' && location.pathname === '/');
@@ -125,16 +142,19 @@ export default function Layout({ children }) {
                         isActive
                           ? 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white',
-                        'group flex items-center px-2 py-2 text-sm font-medium rounded-md'
+                        'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
+                        desktopSidebarCollapsed ? 'justify-center' : ''
                       )}
+                      title={desktopSidebarCollapsed ? item.name : ''}
                     >
                       <item.icon
                         className={classNames(
                           isActive ? 'text-gray-500 dark:text-gray-300' : 'text-gray-400 group-hover:text-gray-500 dark:text-gray-400 dark:group-hover:text-gray-300',
-                          'mr-3 flex-shrink-0 h-6 w-6'
+                          'flex-shrink-0 h-6 w-6',
+                          desktopSidebarCollapsed ? '' : 'mr-3'
                         )}
                       />
-                      {item.name}
+                      {!desktopSidebarCollapsed && item.name}
                     </Link>
                   );
                 })}
@@ -148,14 +168,29 @@ export default function Layout({ children }) {
       <div className="flex flex-col w-0 flex-1 overflow-hidden">
         {/* Top bar */}
         <div className="flex items-center justify-between bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
-          <div className="md:hidden">
-            <button
-              type="button"
-              className="h-10 w-10 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Bars3Icon className="h-6 w-6" />
-            </button>
+          <div className="flex items-center space-x-4">
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              <button
+                type="button"
+                className="h-10 w-10 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Bars3Icon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            {/* Desktop sidebar toggle button */}
+            <div className="hidden md:block">
+              <button
+                type="button"
+                className="h-10 w-10 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 transition-colors"
+                onClick={() => setDesktopSidebarCollapsed(!desktopSidebarCollapsed)}
+                title={desktopSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                <Bars3Icon className="h-6 w-6" />
+              </button>
+            </div>
           </div>
           
           {/* User info and actions */}

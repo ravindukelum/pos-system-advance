@@ -15,6 +15,7 @@ import { salesAPI, inventoryAPI, settingsAPI, customersAPI } from '../services/a
 import PrintInvoice from '../components/PrintInvoice';
 import html2pdf from 'html2pdf.js';
 import AdvancedBarcodeScanner from '../components/AdvancedBarcodeScanner';
+import { getCurrencySymbol, formatCurrency } from '../utils/currency';
 
 const Sales = () => {
   const [sales, setSales] = useState([]);
@@ -117,18 +118,7 @@ const Sales = () => {
     }
   };
 
-  const getCurrencySymbol = (currencyCode) => {
-    const currencyMap = {
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'JPY': '¥',
-      'CAD': 'C$',
-      'AUD': 'A$',
-      'LKR': '₨'
-    };
-    return currencyMap[currencyCode] || currencyCode;
-  };
+
 
   // Function to generate invoice PDF
   const generateInvoicePDF = async (sale) => {
@@ -656,18 +646,18 @@ const Sales = () => {
 
       {/* Sales Table - Desktop */}
       <div className="hidden lg:block bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="w-full">
+          <table className="table-fixed w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Items</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Paid</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invoice</th>
+                <th className="w-16 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
+                <th className="w-32 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Customer</th>
+                <th className="w-40 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Items</th>
+                <th className="w-20 px-2 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total</th>
+                <th className="w-20 px-2 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Paid</th>
+                <th className="w-16 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                <th className="w-24 px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -680,71 +670,70 @@ const Sales = () => {
                ) : (
                  filteredSales.map((sale) => (
                    <tr key={sale.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                     <td className="w-32 px-2 py-2 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-white text-left" title={sale.invoice}>
                        {sale.invoice}
                      </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                       {new Date(sale.created_at).toLocaleDateString()}
+                     <td className="w-16 px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 text-left">
+                       {new Date(sale.created_at).toLocaleDateString('en-GB', {day: '2-digit', month: '2-digit'})}
                      </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                       <div>
-                         <div className="font-medium text-gray-900 dark:text-white">{sale.customer_name || 'Walk-in Customer'}</div>
-                         {sale.customer_phone && (
-                           <div className="text-xs text-gray-400 dark:text-gray-500">{sale.customer_phone}</div>
-                         )}
+                     <td className="w-32 px-2 py-2 text-xs text-gray-500 dark:text-gray-400 text-left">
+                       <div className="truncate" title={sale.customer_name || 'Walk-in Customer'}>
+                         <div className="font-medium text-gray-900 dark:text-white truncate">{sale.customer_name || 'Walk-in'}</div>
                        </div>
                      </td>
-                     <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                       <div className="max-w-xs truncate" title={sale.items_summary}>
+                     <td className="w-40 px-2 py-2 text-xs text-gray-500 dark:text-gray-400 text-left">
+                       <div className="truncate" title={sale.items_summary}>
                          {sale.items_summary}
                        </div>
                      </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                       RS {parseFloat(sale.total_amount).toFixed(2)}
+                     <td className="w-20 px-2 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-white font-medium text-right">
+                       {formatCurrency(sale.total_amount, settings?.currency || 'LKR', 2)}
                      </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                       RS {parseFloat(sale.paid_amount).toFixed(2)}
+                     <td className="w-20 px-2 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 text-right">
+                       {formatCurrency(sale.paid_amount, settings?.currency || 'LKR', 2)}
                      </td>
-                     <td className="px-6 py-4 whitespace-nowrap">
-                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                         sale.status === 'paid' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
-                         sale.status === 'unpaid' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
-                         'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                       }`}>
-                         {sale.status}
-                       </span>
-                     </td>
-                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                       <button
-                         onClick={() => handleDirectPrint(sale)}
-                         className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                         title="Print Invoice"
-                       >
-                         <PrinterIcon className="h-5 w-5" />
-                       </button>
-                       {sale.customer_phone && (
+                     <td className="w-16 px-2 py-2 whitespace-nowrap text-left">
+                         <span className={`px-1 py-0.5 text-xs font-medium rounded ${
+                           sale.status === 'paid' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                           sale.status === 'unpaid' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                           'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+                         }`}>
+                           {sale.status}
+                         </span>
+                       </td>
+                       <td className="w-24 px-2 py-2 whitespace-nowrap text-xs font-medium text-left">
+                       <div className="flex items-center space-x-1">
                          <button
-                           onClick={() => sendWhatsApp(sale)}
-                           className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                           title="Send via WhatsApp"
+                           onClick={() => handleDirectPrint(sale)}
+                           className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                           title="Print Invoice"
                          >
-                           <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                           <PrinterIcon className="h-4 w-4" />
                          </button>
-                       )}
-                       <button
-                         onClick={() => openPaymentModal(sale)}
-                         className="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300"
-                         title="Update Payment"
-                       >
-                         <CurrencyDollarIcon className="h-5 w-5" />
-                       </button>
-                       <button
-                         onClick={() => handleDelete(sale.id)}
-                         className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                         title="Delete Sale"
-                       >
-                         <TrashIcon className="h-5 w-5" />
-                       </button>
+                         {sale.customer_phone && (
+                           <button
+                             onClick={() => sendWhatsApp(sale)}
+                             className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                             title="Send via WhatsApp"
+                           >
+                             <ChatBubbleLeftRightIcon className="h-4 w-4" />
+                           </button>
+                         )}
+                         <button
+                           onClick={() => openPaymentModal(sale)}
+                           className="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300"
+                           title="Update Payment"
+                         >
+                           <CurrencyDollarIcon className="h-4 w-4" />
+                         </button>
+                         <button
+                           onClick={() => handleDelete(sale.id)}
+                           className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                           title="Delete Sale"
+                         >
+                           <TrashIcon className="h-4 w-4" />
+                         </button>
+                       </div>
                      </td>
                    </tr>
                  ))
@@ -803,13 +792,13 @@ const Sales = () => {
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Total Amount</div>
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    RS {parseFloat(sale.total_amount).toFixed(2)}
+                    {formatCurrency(sale.total_amount, settings?.currency || 'LKR', 2)}
                   </div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Paid Amount</div>
                   <div className="text-lg font-medium text-gray-700 dark:text-gray-300">
-                    RS {parseFloat(sale.paid_amount).toFixed(2)}
+                    {formatCurrency(sale.paid_amount, settings?.currency || 'LKR', 2)}
                   </div>
                 </div>
               </div>
@@ -905,7 +894,7 @@ const Sales = () => {
                             : `${item.total_quantity || item.quantity} (${item.locations_count || 0} locations)`
                           }
                         </div>
-                        <div className="text-sm font-medium text-green-600 dark:text-green-400">RS {item.sell_price}</div>
+                        <div className="text-sm font-medium text-green-600 dark:text-green-400">{formatCurrency(item.sell_price, settings?.currency || 'LKR', 2)}</div>
                       </div>
                       <button
                         onClick={() => addToCart(item)}
@@ -1024,7 +1013,7 @@ const Sales = () => {
                             className="w-20 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             step="0.01"
                             min="0"
-                          /> RS each
+                          /> {getCurrencySymbol(settings?.currency || 'LKR')} each
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1049,7 +1038,7 @@ const Sales = () => {
                         </button>
                       </div>
                       <div className="text-right ml-4">
-                        <div className="font-medium text-gray-900 dark:text-white">RS {(item.unit_price * item.quantity).toFixed(2)}</div>
+                        <div className="font-medium text-gray-900 dark:text-white">{formatCurrency(item.unit_price * item.quantity, settings?.currency || 'LKR', 2)}</div>
                       </div>
                     </div>
                   ))}
@@ -1110,28 +1099,28 @@ const Sales = () => {
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
                         <span>Subtotal:</span>
-                        <span>RS {totals.subtotal}</span>
+                        <span>{formatCurrency(totals.subtotal, settings?.currency || 'LKR', 2)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
                         <span>Tax ({invoiceSettings.taxRate}%):</span>
-                        <span>RS {totals.taxAmount}</span>
+                        <span>{formatCurrency(totals.taxAmount, settings?.currency || 'LKR', 2)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
                         <span>Discount:</span>
-                        <span>-RS {invoiceSettings.discountAmount.toFixed(2)}</span>
+                        <span>-{formatCurrency(invoiceSettings.discountAmount, settings?.currency || 'LKR', 2)}</span>
                       </div>
                       <div className="flex justify-between font-bold text-lg border-t border-gray-200 dark:border-gray-600 pt-1 text-gray-900 dark:text-white">
                         <span>Total:</span>
-                        <span>RS {totals.total}</span>
+                        <span>{formatCurrency(totals.total, settings?.currency || 'LKR', 2)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                         <span>Paid:</span>
-                        <span>RS {invoiceSettings.paidAmount.toFixed(2)}</span>
+                        <span>{formatCurrency(invoiceSettings.paidAmount, settings?.currency || 'LKR', 2)}</span>
                       </div>
                       <div className="flex justify-between text-sm font-medium">
                         <span className="text-gray-700 dark:text-gray-300">Balance:</span>
                         <span className={parseFloat(totals.total) - invoiceSettings.paidAmount > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
-                          RS {(parseFloat(totals.total) - invoiceSettings.paidAmount).toFixed(2)}
+                          {formatCurrency(parseFloat(totals.total) - invoiceSettings.paidAmount, settings?.currency || 'LKR', 2)}
                         </span>
                       </div>
                     </div>
@@ -1182,10 +1171,10 @@ const Sales = () => {
                   Invoice: {selectedSale.invoice}
                 </label>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Total Amount: RS {parseFloat(selectedSale.total_amount).toFixed(2)}
+                  Total Amount: {formatCurrency(selectedSale.total_amount, settings?.currency || 'LKR', 2)}
                 </div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Current Paid: RS {parseFloat(selectedSale.paid_amount).toFixed(2)}
+                  Current Paid: {formatCurrency(selectedSale.paid_amount, settings?.currency || 'LKR', 2)}
                 </div>
               </div>
               

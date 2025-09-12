@@ -420,14 +420,14 @@ const PrintInvoice = ({ sale, onClose }) => {
 
       {/* Modal Overlay */}
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-white rounded-lg shadow-lg w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4" onClick={(e) => e.stopPropagation()}>
           <div className="flex justify-between items-center mb-4 no-print">
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
               {isPreviewMode ? 'Invoice Preview' : 'Print Invoice'}
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 dark:text-gray-300 dark:hover:text-gray-100"
             >
               ×
             </button>
@@ -437,7 +437,7 @@ const PrintInvoice = ({ sale, onClose }) => {
           {loading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-2 text-gray-600">Loading settings...</span>
+              <span className="ml-2 text-gray-600 dark:text-gray-300">Loading settings...</span>
             </div>
           ) : (
           <div className="print-area">

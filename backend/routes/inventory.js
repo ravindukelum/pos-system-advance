@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
       const sql = `
         SELECT i.*, 
                COALESCE(SUM(li.quantity), 0) as total_quantity,
-               COUNT(li.location_id) as locations_count
+               COUNT(CASE WHEN li.quantity > 0 THEN li.location_id END) as locations_count
         FROM inventory i
         LEFT JOIN location_inventory li ON i.id = li.item_id
         GROUP BY i.id
@@ -129,9 +129,9 @@ router.post('/', async (req, res) => {
     
     // Create the inventory item - using direct database connection
     console.log('Request body:', req.body);
-    console.log('Extracted values:', { item_name, sku, buy_price, sell_price, finalQuantity, finalMinStock });
-    const sql = 'INSERT INTO inventory (item_name, sku, buy_price, sell_price, unit_price, quantity, min_stock) VALUES (?, ?, ?, ?, ?, ?, ?)';
-    const params = [item_name, sku, buy_price, sell_price, buy_price, finalQuantity, finalMinStock];
+    console.log('Extracted values:', { item_name, sku, category, supplier, buy_price, sell_price, finalQuantity, finalMinStock, description, barcode, warranty_days });
+    const sql = 'INSERT INTO inventory (item_name, sku, category, supplier, buy_price, sell_price, unit_price, quantity, min_stock, description, barcode, warranty_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    const params = [item_name, sku, category, supplier, buy_price, sell_price, buy_price, finalQuantity, finalMinStock, description, barcode, warranty_days || 0];
     console.log('SQL params:', params);
     const [result] = await db.execute(sql, params);
     
